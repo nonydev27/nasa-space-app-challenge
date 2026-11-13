@@ -1,5 +1,5 @@
 {
-  "name": "astrolab-mission-trainer",
+  "name": "junior-astronaut-mission-trainer",
   "description": "AstroLab: An Open-Source Junior Astronaut Mission Trainer for the 2026 NASA Space Apps Challenge",
   "private": true,
   "version": "1.0.0",
@@ -7,9 +7,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc -p tsconfig.json && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "react": "^19.3.1",
