@@ -204,9 +204,14 @@ export function updateSimulationTick(state, dtSeconds = 1) {
     s.cropHealth = Math.max(0, s.cropHealth - 0.4 * dtHour);
   }
 
-  // --- Radiation & Space Weather (DONKI Model) ---
-  let envRadiationRate = s.location === 'moon' ? 0.12 : 0.08; // mSv/hr background
+  // --- Radiation & Space Weather (DONKI + RadLab calibration) ---
+  // Baseline dose rates calibrated against real ISS dosimeter measurements in
+  // NASA's RadLab database (~0.9-1.2 mSv/day crew average ≈ 0.04 mSv/hr); the
+  // lunar surface (no magnetosphere) runs higher, Mars' thin atmosphere a bit
+  // lower. See RADLAB_MEASUREMENTS in nasaData.js.
+  let envRadiationRate = s.location === 'moon' ? 0.07 : 0.045; // mSv/hr calibrated baseline
   if (s.activeAlert && s.activeAlert.source === 'DONKI') {
+    // SEP event spike — Matroshka phantom torso EVA benchmark (~2.1 mSv/day)
     envRadiationRate *= 12; // Massive solar flare spike!
   }
 

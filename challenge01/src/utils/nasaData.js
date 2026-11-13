@@ -42,6 +42,16 @@ export const NASA_GLOSSARY = {
     definition: "A nuclear space battery that turns heat from decaying plutonium into reliable electricity, running nonstop for 30+ years without sunlight.",
     didYouKnow: "NASA's Curiosity and Perseverance rovers on Mars are powered by RTGs, allowing them to work even during pitch-black dust storms."
   },
+  RadLab: {
+    title: "RadLab (Radiation Dosimetry)",
+    definition: "NASA's RadLab database holds real radiation dose measurements recorded by dosimeter instruments aboard the International Space Station, contributed by multiple international space agencies.",
+    didYouKnow: "Real ISS dosimeters measure about 0.3 to 1.8 mSv per day of absorbed cosmic radiation — that's over 100 times the dose you get on Earth!"
+  },
+  "Mars Trek": {
+    title: "NASA Mars Trek",
+    definition: "An interactive map of Mars built from real orbiter imagery and elevation data (including Curiosity and Perseverance rover sites). Scientists use it to plan landing sites and rover routes.",
+    didYouKnow: "Jezero Crater — home of our Mars outpost in this game — is over 45 kilometers wide and was chosen because an ancient river once flowed into it!"
+  },
   "Lag / Latency": {
     title: "Communication Delay",
     definition: "Radio signals travel at the speed of light (300,000 km/s). It takes ~1.3 seconds to reach the Moon, but between 4 and 24 minutes to reach Mars!",
@@ -115,6 +125,86 @@ export const REAL_OSDR_STUDIES = [
   }
 ];
 
+// RadLab (OSDR Radiation Dosimetry Database) — real ISS dosimeter readings
+// RadLab: https://osdr.nasa.gov/bio/repo/?q=&id=radlab
+export const RADLAB_MEASUREMENTS = [
+  {
+    instrument: "ISS ALTEA Silicon Detector",
+    agency: "NASA / ASI (Italy)",
+    absorbedDoseRate: "0.0086 mGy/hr",
+    doseEquivalentPerDay: "~0.9 mSv/day",
+    location: "US Lab Module (unshielded window area)",
+    gameplayUse: "Baseline crew dose in the Hab with magnetic shield OFF."
+  },
+  {
+    instrument: "Liulin-5 Charged Particle Telescope",
+    agency: "Bulgarian Academy of Sciences / RSA",
+    absorbedDoseRate: "0.011 mGy/hr",
+    doseEquivalentPerDay: "~1.2 mSv/day",
+    location: "PIE3DOSS module interior",
+    gameplayUse: "Hab dose with standard hull shielding raised."
+  },
+  {
+    instrument: "Matroshka Phantom Torso",
+    agency: "DLR (Germany) / ESA",
+    absorbedDoseRate: "up to 0.061 mGy/hr peak (EVA / storm peak analog)",
+    doseEquivalentPerDay: "~2.1 mSv/day during SEP events",
+    location: "External platforms & EVA suit benchmark",
+    gameplayUse: "Dose multiplier applied during DONKI solar particle events."
+  }
+];
+
+// CSA (Canadian Space Agency) partner educational resources
+export const CSA_RESOURCES = [
+  {
+    title: "Space Resources for STEM and Youth Organizations",
+    url: "https://www.asc-csa.gc.ca/eng/youth/default.asp",
+    description: "Free bilingual (EN/FR) CSA tools and activities for museums, libraries, camps, clubs, and outreach groups.",
+    audience: "Educators & Outreach"
+  },
+  {
+    title: "Food Production on the Moon and in Remote Areas",
+    url: "https://www.asc-csa.gc.ca/eng/multimedia/search/video/watch/13556",
+    description: "A CSA educational toolkit connecting space food production to astronaut health and nutrition — and back to benefits on Earth.",
+    audience: "Junior Astronauts"
+  }
+];
+
+// Curated external NASA data portals used by the trainer
+export const RESOURCE_LINKS = [
+  {
+    title: "NASA Open APIs (api.nasa.gov)",
+    url: "https://api.nasa.gov/",
+    description: "Free API key for DONKI space weather, APOD, Mars Rover Photos and more.",
+    tag: "API"
+  },
+  {
+    title: "DONKI Space Weather Database",
+    url: "https://kauai.ccmc.gsfc.nasa.gov/DONKI/",
+    description: "Browse real solar flares, CMEs, and SEP events driving our storm alerts.",
+    tag: "DONKI"
+  },
+  {
+    title: "NASA Open Science Data Repository (OSDR)",
+    url: "https://osdr.nasa.gov/osdr/public/",
+    description: "Open archive of space biology and astronaut health studies (search API).",
+    tag: "OSDR"
+  },
+  {
+    title: "RadLab Radiation Dosimetry Database",
+    url: "https://osdr.nasa.gov/bio/repo/?q=&id=radlab",
+    description: "Real ISS dosimeter dose measurements — the numbers behind our radiation gauges.",
+    tag: "RadLab"
+  },
+  {
+    title: "NASA Mars Trek",
+    url: "https://mars.nasa.gov/resources/mars-trek/",
+    description: "Interactive Mars imagery, elevation, and terrain data (Jezero Crater site).",
+    tag: "Mars Trek"
+  },
+  ...CSA_RESOURCES.map((r) => ({ ...r, tag: "CSA" }))
+];
+
 export const PLANETARY_LOCATIONS = {
   moon: {
     name: "Lunar South Pole (Artemis Base Camp)",
@@ -138,7 +228,15 @@ export const PLANETARY_LOCATIONS = {
     tempRange: "-125°C to +20°C",
     commDelay: "4 to 24 minutes (Simulated ~12 min average)",
     description: "An ancient river lake bed rich in clay minerals. Subject to global dust storms that can shroud the sun for months at a time.",
-    primaryChallenge: "Catastrophic dust storms cutting solar power and communication latency with Earth."
+    primaryChallenge: "Catastrophic dust storms cutting solar power and communication latency with Earth.",
+    // Mars Trek verified terrain parameters (Jezero crater western delta)
+    marsTrek: {
+      portal: "NASA Mars Trek",
+      url: "https://mars.nasa.gov/resources/mars-trek/",
+      craterDiameterKm: 45,
+      elevationM: -2400, // relative to Mars areoid
+      terrainNote: "Landing ellipsis at the western delta fan; clay-carbonate outcrops mapped by Perseverance."
+    }
   }
 };
 

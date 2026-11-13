@@ -22,8 +22,8 @@ export function Navbar({
         </div>
         <div className="title-group">
           <h1 className="app-title">
-            <span className="title-highlight">OUTPOST COMMANDER</span>
-            <span className="title-sub">Junior Astronaut Mission Trainer</span>
+            <span className="title-highlight">ASTROLAB</span>
+            <span className="title-sub">Junior Astronaut Mission Trainer · Open Source</span>
           </h1>
           <div className="mission-tag-pill" onClick={onOpenMissionSelect}>
             <span className="loc-icon">{state.location === 'moon' ? '🌕' : '🔴'}</span>

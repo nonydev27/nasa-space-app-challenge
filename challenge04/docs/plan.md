@@ -1,5 +1,5 @@
-# 🚀 Junior Astronaut Mission Trainer: Outpost Commander
-### 2026 NASA Space Apps Challenge — Project Architecture & Implementation Plan
+# 🚀 AstroLab: Junior Astronaut Mission Trainer
+### An Open-Source Deep Space Outpost Simulator — 2026 NASA Space Apps Challenge Plan
 
 > **Challenge:** [Build a Junior Astronaut Mission Trainer](https://www.spaceappschallenge.org/2026/challenges/junior-astronaut-mission-trainer/)  
 > **Event:** 2026 NASA Space Apps Challenge  
