@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { soundFx } from '../utils/soundEffects';
 import { NASA_GLOSSARY } from '../utils/nasaData';
 
-export function GlossaryModal({ isOpen, onClose, initialTerm = null }) {
+/** @param {{ isOpen: boolean, onClose: () => void, initialTerm?: string | null }} props */
+export function GlossaryModal({ isOpen, onClose, initialTerm = /** @type {string | null} */ (null) }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTerm, setSelectedTerm] = useState(initialTerm || 'Sol');
 

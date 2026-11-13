@@ -92,7 +92,7 @@ export function createInitialSimulationState(missionConfig, location = 'moon', m
     completed: false,
     failed: false,
     failureReason: "",
-    unlockedBadges: []
+    unlockedBadges: /** @type {string[]} */ ([])
   };
 }
 
@@ -101,7 +101,12 @@ export function updateSimulationTick(state, dtSeconds = 1) {
     return state;
   }
 
-  const s = { ...state };
+  // Copy nested objects we mutate so React StrictMode's double-invoked updaters stay pure.
+  const s = {
+    ...state,
+    activeAlert: state.activeAlert ? { ...state.activeAlert } : null,
+    unlockedBadges: [...state.unlockedBadges]
+  };
   const dtHour = (dtSeconds / 60) * s.speed; // scaled game time
 
   // Advance time
@@ -245,6 +250,18 @@ export function updateSimulationTick(state, dtSeconds = 1) {
       }
     }
     s.sciencePoints += scienceRate * dtHour;
+  }
+
+  // --- Storm passes some time after impact (SEP events last hours, compressed here) ---
+  if (s.activeAlert && s.activeAlert.impactHandled) {
+    s.activeAlert.stormRemainingSec = (s.activeAlert.stormRemainingSec ?? 40) - dtSeconds;
+    if (s.activeAlert.stormRemainingSec <= 0) {
+      s.activeAlert = null;
+      s.logs = [
+        { id: Date.now(), sol: s.sol, hour: formatHour(s.hour), text: "DONKI all-clear: proton flux back to background levels. Safe to leave the bunker.", type: "success" },
+        ...s.logs.slice(0, 30)
+      ];
+    }
   }
 
   // --- Handle Active Alert Countdown ---

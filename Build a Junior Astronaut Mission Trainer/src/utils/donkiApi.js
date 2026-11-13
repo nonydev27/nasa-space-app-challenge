@@ -41,7 +41,7 @@ function extractSpeed(cmeAnalyses = []) {
 export async function fetchRecentDonkiEvents(days = 7) {
   const end = new Date();
   const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
-  const fmt = (d) => d.toISOString().slice(0, 19).replace("T", " ");
+  const fmt = (d) => d.toISOString().slice(0, 10); // DONKI expects yyyy-MM-dd
   const qs = `startDate=${fmt(start)}&endDate=${fmt(end)}&api_key=${API_KEY}`;
 
   const [flrRes, cmeRes] = await Promise.all([

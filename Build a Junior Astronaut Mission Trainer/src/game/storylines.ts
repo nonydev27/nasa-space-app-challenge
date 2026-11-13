@@ -253,6 +253,42 @@ function introBeats(m: Mission, ctx: StoryContext): StoryBeat[] {
         }
       ];
 
+
+    case 'mission-6':
+      return[
+        {
+          shot: 'establishing',
+          kicker: 'LUNAR SOUTH POLE',
+          text: `Commander ${you}, the Artemis Base Camp is now a permanent outpost. The crew is healthy, the batteries are charged, and the solar wings are tracking the Sun.`,
+          data: [
+            { label: 'Gravity', value: MOON.gravity, source: 'Artemis / LRO' },
+          ]
+        }
+      ];
+
+      case 'mission-7':
+      return[
+        {
+          shot: 'establishing',
+          kicker: 'JEZERO CRATER · MARS',
+          text: `Commander ${you}, the Jezero outpost is now a permanent settlement. The crew is healthy, the batteries are charged, and the solar wings are tracking the Sun.`,
+          data: [
+            { label: 'Gravity', value: MARS.gravity, source: 'Mars 2020' },
+          ]
+        }
+      ];  
+      case 'mission-8':
+        return[
+          {
+            shot: 'establishing',
+            kicker: 'LUNAR SOUTH POLE',
+            text: `Commander ${you}, the Artemis Base Camp is now a permanent outpost. The crew is healthy, the batteries are charged, and the solar wings are tracking the Sun.`,
+            data: [
+              { label: 'Gravity', value: MOON.gravity, source: 'Artemis / LRO' },
+            ]
+          }
+        ]; 
+
     default:
       return [];
   }
