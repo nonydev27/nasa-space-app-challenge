@@ -60,6 +60,17 @@ export const AVATARS: AvatarConfig[] = [
     accent: '#8b5cf6',
     visor: '#b9a3e3',
     skin: '#a8714f'
+  },
+
+  {
+    id: 'nonydev',
+    name: 'Nonydev',
+    role: 'Mission Specialist',
+    bio: 'A skilled engineer and problem solver, Nonydev is always ready to tackle any challenge that comes their way.',
+    suit: '#f5f5f5',
+    accent: '#f2c12e',
+    visor: '#d9a441',
+    skin: '#c69c7b'
   }
 ];
 
