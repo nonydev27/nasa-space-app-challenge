@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
 import { SignUpScreen } from './screens/SignUpScreen';
 import { MissionMapScreen } from './screens/MissionMapScreen';
+import { TitleScreen } from './screens/TitleScreen';
+import type { CrewLink } from './net/crewLink';
 
 import { isMissionUnlocked, loadActivePilot, setActivePilot } from './game/profileStore';
 import type { Location, PilotProfile } from './game/types';
@@ -13,10 +15,11 @@ const AvatarScreen = lazy(() => import('./screens/AvatarScreen').then((m) => ({ 
 const MissionRunner = lazy(() => import('./screens/MissionRunner').then((m) => ({ default: m.MissionRunner })));
 
 type Screen =
+  | { kind: 'title' }
   | { kind: 'signup' }
   | { kind: 'avatar'; firstTime: boolean }
   | { kind: 'map' }
-  | { kind: 'mission'; missionId: string; location: Location; run: number };
+  | { kind: 'mission'; missionId: string; location: Location; run: number; crew: CrewLink | null };
 
 function initialScreen(pilot: PilotProfile | null): Screen {
   if (!pilot) return { kind: 'signup' };
@@ -26,17 +29,22 @@ function initialScreen(pilot: PilotProfile | null): Screen {
 
 export default function App() {
   const [pilot, setPilot] = useState<PilotProfile | null>(() => loadActivePilot());
-  const [screen, setScreen] = useState<Screen>(() => initialScreen(pilot));
+  const [screen, setScreen] = useState<Screen>({ kind: 'title' });
 
   const onPilotUpdate = useCallback((p: PilotProfile) => setPilot(p), []);
 
-  const launch = (missionId: string, location: Location) => {
-    if (!pilot || !isMissionUnlocked(pilot, missionId)) return;
-    setScreen((s) => ({ kind: 'mission', missionId, location, run: (s.kind === 'mission' ? s.run : 0) + 1 }));
+  const launch = (missionId: string, location: Location, crew: CrewLink | null = null) => {
+    if (!pilot || !isMissionUnlocked(pilot, missionId)) {
+      crew?.close();
+      return;
+    }
+    setScreen((s) => ({ kind: 'mission', missionId, location, crew, run: (s.kind === 'mission' ? s.run : 0) + 1 }));
   };
 
   let body;
-  if (!pilot || screen.kind === 'signup') {
+  if (screen.kind === 'title') {
+    body = <TitleScreen onPlay={() => setScreen(initialScreen(pilot))} />;
+  } else if (!pilot || screen.kind === 'signup') {
     body = (
       <SignUpScreen
         onSignedIn={(p) => {
@@ -76,9 +84,10 @@ export default function App() {
         pilot={pilot}
         missionId={screen.missionId}
         location={screen.location}
+        crewLink={screen.crew}
         onPilotUpdate={onPilotUpdate}
         onExit={() => setScreen({ kind: 'map' })}
-        onNext={launch}
+        onNext={(id, loc) => launch(id, loc, null)}
       />
     );
   }

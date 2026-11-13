@@ -17,6 +17,9 @@ import { CREW_NPC } from '../game/avatars';
 import { buildAstronaut, type AstronautRig } from './astronaut';
 import { fbm, rng } from './noise';
 import { earthTexture, glowTexture, habitatPanelTexture, regolithTexture, solarCellTexture } from './textures';
+import { Footprints, JetFlames, ParticlePool } from './fx';
+import { RemoteCrew, type PeerPose } from './remoteCrew';
+import { soundFx } from '../utils/soundEffects';
 
 export type ModuleId = 'eclss' | 'greenhouse' | 'power' | 'comms' | 'rover' | 'bunker';
 
@@ -25,7 +28,18 @@ export interface OutpostSceneOptions {
   avatar: AvatarConfig;
   callsign: string;
   onModuleClick?: (module: ModuleId) => void;
+  /** Fired when the player starts driving their astronaut while the camera isn't following them. */
+  onTakeControl?: () => void;
 }
+
+export interface PlayerStatus {
+  fuel: number;
+  airborne: boolean;
+  thrusting: boolean;
+  altitude: number;
+}
+
+export type { PeerPose };
 
 // ---------------------------------------------------------------- layout (metres)
 const HAB = new THREE.Vector3(0, 0, 0);
@@ -39,16 +53,25 @@ const COMMS = new THREE.Vector3(-24, 0, -8);
 const ROVER_DOCK = new THREE.Vector3(10, 0, 10);
 const LANDER = new THREE.Vector3(-36, 0, -30);
 
-const COLLIDERS: Array<{ x: number; z: number; r: number }> = [
-  { x: HAB.x, z: HAB.z, r: 7.6 },
-  { x: GREENHOUSE.x, z: GREENHOUSE.z, r: 5.3 },
-  { x: BUNKER.x, z: BUNKER.z, r: 4.6 },
-  { x: RTG.x, z: RTG.z, r: 2.6 },
-  { x: COMMS.x, z: COMMS.z, r: 2.6 },
-  { x: LANDER.x, z: LANDER.z, r: 4.2 },
-  { x: SOLAR_A.x, z: SOLAR_A.z, r: 0.8 },
-  { x: SOLAR_B.x, z: SOLAR_B.z, r: 0.8 }
+// r = footprint radius, h = height you must clear (with jetpack) to pass over it
+const COLLIDERS: Array<{ x: number; z: number; r: number; h: number }> = [
+  { x: HAB.x, z: HAB.z, r: 7.6, h: 9.2 },
+  { x: GREENHOUSE.x, z: GREENHOUSE.z, r: 5.3, h: 5.5 },
+  { x: BUNKER.x, z: BUNKER.z, r: 4.6, h: 2.8 },
+  { x: RTG.x, z: RTG.z, r: 2.6, h: 2.6 },
+  { x: COMMS.x, z: COMMS.z, r: 2.6, h: 6 },
+  { x: LANDER.x, z: LANDER.z, r: 4.2, h: 12 },
+  { x: SOLAR_A.x, z: SOLAR_A.z, r: 0.8, h: 7 },
+  { x: SOLAR_B.x, z: SOLAR_B.z, r: 0.8, h: 7 }
 ];
+
+// Physics (real surface gravity; jump + jetpack tuned for fun)
+const GRAVITY = { moon: 1.62, mars: 3.71 };
+const JUMP_SPEED = { moon: 2.9, mars: 3.7 };
+const THRUST_ACCEL = 6.8; // m/s² upward while the jetpack fires
+const FUEL_BURN_SECONDS = 3.4;
+const FUEL_REFILL_SECONDS = 3;
+const CEILING = 45;
 
 const PATROL: THREE.Vector3[] = [
   [11.2, 0], [12, 7], [2, 10.5], [-12, 10.5], [-22, 9], [-21, -3], [-19, -12], [-10, -14.2],
@@ -258,9 +281,32 @@ export class OutpostScene {
   private playerTag!: CSS2DObject;
   private npcs: Walker[] = [];
   private manual = false;
-  private manualIdle = 0;
   private keys = new Set<string>();
   private helmetPitch = 0;
+
+  // physics & controls
+  private vel = new THREE.Vector3();
+  private airborne = false;
+  private fuel = 1;
+  private thrusting = false;
+  private jumpHeld = false;
+  private jumpRequested = false;
+  private jumpAt = 0;
+  private thrustKey = false;
+  private touchMove = new THREE.Vector2();
+  private touchJump = false;
+  private touchThrust = false;
+  private stepDist = 0;
+  private stepSide = 1;
+  private lastPointer: { x: number; y: number } | null = null;
+  private exhaust!: ParticlePool;
+  private dustPuffs!: ParticlePool;
+  private footprints!: Footprints;
+  private playerFlames!: JetFlames;
+  private crew!: RemoteCrew;
+  private playerBubble!: HTMLDivElement;
+  private playerBubbleTimer = 0;
+  private dustColor = new THREE.Color();
 
   // camera direction
   private shot: ShotId = 'establishing';
@@ -352,7 +398,6 @@ export class OutpostScene {
     this.labelRenderer.domElement.style.display = cinematic || !this.labelsVisible ? 'none' : '';
     if (shot === this.shot && this.tween) return;
     this.shot = shot;
-    this.manual = false;
     this.controls.autoRotate = cinematic && shot !== 'avatar' && shot !== 'helmet' && shot !== 'rover';
     if (shot === 'helmet') {
       this.tween = null;
@@ -401,7 +446,70 @@ export class OutpostScene {
     await this.renderer.xr.setSession(session);
   }
 
+  // ---- controls (keyboard is handled internally; these are for touch UI)
+  setMoveInput(x: number, y: number): void {
+    this.touchMove.set(x, y);
+    if (this.touchMove.lengthSq() > 1) this.touchMove.normalize();
+  }
+
+  setButton(button: 'jump' | 'thrust', down: boolean): void {
+    if (button === 'jump') {
+      if (down && !this.touchJump) this.jumpRequested = true;
+      this.touchJump = down;
+    } else {
+      this.touchThrust = down;
+    }
+  }
+
+  getPlayerPose(): PeerPose {
+    const p = this.player.pos;
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    return {
+      x: +p.x.toFixed(2),
+      y: +p.y.toFixed(2),
+      z: +p.z.toFixed(2),
+      h: +this.player.heading.toFixed(3),
+      m: speed > 0.3 || this.autoWalking,
+      a: this.airborne,
+      t: this.thrusting,
+      v: !this.playerHidden
+    };
+  }
+
+  getPlayerStatus(): PlayerStatus {
+    const p = this.player.pos;
+    return { fuel: this.fuel, airborne: this.airborne, thrusting: this.thrusting, altitude: Math.max(0, p.y - this.heightAt(p.x, p.z)) };
+  }
+
+  // ---- multiplayer crew
+  addPeer(id: string, name: string, avatar: AvatarConfig): void {
+    this.crew.add(id, name, avatar);
+  }
+
+  removePeer(id: string): void {
+    this.crew.remove(id);
+  }
+
+  setPeerPose(id: string, pose: PeerPose): void {
+    this.crew.setPose(id, pose);
+  }
+
+  peerEmote(id: string, emoji: string): void {
+    this.crew.emote(id, emoji);
+  }
+
+  playerEmote(emoji: string): void {
+    const b = this.playerBubble;
+    b.textContent = emoji;
+    b.classList.remove('show');
+    void b.offsetWidth;
+    b.classList.add('show');
+    this.playerBubbleTimer = 3.2;
+  }
+
   dispose(): void {
+    soundFx.setThruster(false);
+    this.crew.clear();
     this.renderer.setAnimationLoop(null);
     this.unbindInput();
     this.resizeObserver.disconnect();
@@ -825,6 +933,19 @@ export class OutpostScene {
     this.playerTag = new CSS2DObject(tag);
     this.playerTag.position.set(0, 2.45, 0);
     rig.group.add(this.playerTag);
+    this.playerBubble = document.createElement('div');
+    this.playerBubble.className = 'emote-bubble';
+    const bubble = new CSS2DObject(this.playerBubble);
+    bubble.position.set(0, 3.1, 0);
+    rig.group.add(bubble);
+
+    this.exhaust = new ParticlePool(700, { additive: true, drag: 2.5, grow: 2.2 });
+    this.dustPuffs = new ParticlePool(500, { additive: false, drag: 1.6, grow: 3 });
+    this.footprints = new Footprints(260, this.isMoon);
+    this.scene.add(this.exhaust.points, this.dustPuffs.points, this.footprints.mesh);
+    this.playerFlames = new JetFlames(rig);
+    this.crew = new RemoteCrew(this.scene, this.exhaust, this.isMoon);
+    this.dustColor.set(this.isMoon ? '#9d9a94' : '#b4704a');
 
     const npcPaths = [
       [[-11, 8.5], [-20, 8], [-21, 0]],
@@ -891,20 +1012,46 @@ export class OutpostScene {
   // ============================================================ input
   private resizeObserver = new ResizeObserver(() => this.resize());
 
+  private isTyping(e: Event): boolean {
+    const t = e.target as HTMLElement | null;
+    return Boolean(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable));
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
-    const tag = (e.target as HTMLElement | null)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (this.isTyping(e)) return;
     const k = e.key.toLowerCase();
     if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
-      if (this.shot === 'avatar' || this.shot === 'helmet') e.preventDefault();
+      if (!this.cinematic) e.preventDefault();
       this.keys.add(k);
+    } else if (k === ' ' && !this.cinematic) {
+      // stop Space from "clicking" whichever HUD button has focus
+      e.preventDefault();
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      if (!this.jumpHeld) this.jumpRequested = true;
+      this.jumpHeld = true;
+    } else if (k === 'shift') {
+      this.thrustKey = true;
     }
   };
-  private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.key.toLowerCase());
-  private onBlur = () => this.keys.clear();
+
+  private onKeyUp = (e: KeyboardEvent) => {
+    const k = e.key.toLowerCase();
+    if (k === ' ') {
+      if (!this.cinematic && !this.isTyping(e)) e.preventDefault();
+      this.jumpHeld = false;
+    } else if (k === 'shift') this.thrustKey = false;
+    else this.keys.delete(k);
+  };
+
+  private onBlur = () => {
+    this.keys.clear();
+    this.jumpHeld = false;
+    this.thrustKey = false;
+  };
 
   private onPointerDown = (e: PointerEvent) => {
     this.pointerDown = { x: e.clientX, y: e.clientY };
+    this.lastPointer = { x: e.clientX, y: e.clientY };
     if (this.tween && !this.cinematic) {
       // user grabbed the camera mid-flight — hand control back immediately
       this.tween = null;
@@ -914,17 +1061,23 @@ export class OutpostScene {
   };
 
   private onPointerMove = (e: PointerEvent) => {
-    if (this.shot === 'helmet' && this.pointerDown && !this.cinematic) {
-      this.player.heading -= e.movementX * 0.005;
-      this.helmetPitch = Math.max(-0.6, Math.min(0.9, this.helmetPitch - e.movementY * 0.004));
+    const last = this.lastPointer;
+    if (this.shot === 'helmet' && this.pointerDown && last && !this.cinematic) {
+      // computed from coordinates (movementX is 0 for touch on some browsers)
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      const k = e.pointerType === 'touch' ? 0.008 : 0.005;
+      this.player.heading -= dx * k;
+      this.helmetPitch = Math.max(-0.6, Math.min(0.9, this.helmetPitch - dy * k * 0.8));
       this.manual = true;
-      this.manualIdle = 0;
     }
+    this.lastPointer = { x: e.clientX, y: e.clientY };
   };
 
   private onPointerUp = (e: PointerEvent) => {
     const down = this.pointerDown;
     this.pointerDown = null;
+    this.lastPointer = null;
     if (!down || this.cinematic || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
@@ -943,6 +1096,7 @@ export class OutpostScene {
     el.addEventListener('pointerdown', this.onPointerDown);
     el.addEventListener('pointermove', this.onPointerMove);
     el.addEventListener('pointerup', this.onPointerUp);
+    el.addEventListener('pointercancel', this.onPointerUp);
     this.resizeObserver.observe(this.container);
   }
 
@@ -954,6 +1108,7 @@ export class OutpostScene {
     el.removeEventListener('pointerdown', this.onPointerDown);
     el.removeEventListener('pointermove', this.onPointerMove);
     el.removeEventListener('pointerup', this.onPointerUp);
+    el.removeEventListener('pointercancel', this.onPointerUp);
   }
 
   private resize(): void {
@@ -1010,6 +1165,9 @@ export class OutpostScene {
     this.updateEnvironment(dt);
     if (v) this.updateModules(dt, v);
     this.updateCharacters(dt);
+    this.exhaust.update(dt, -0.5);
+    this.dustPuffs.update(dt, this.isMoon ? 0.4 : 0.9);
+    this.crew.update(dt, this.elapsed, this.labelsVisible && !this.cinematic);
     this.updateCamera(dt);
 
     if (this.inXR) {
@@ -1201,6 +1359,7 @@ export class OutpostScene {
 
   private resolveCollisions(p: THREE.Vector3): void {
     for (const c of COLLIDERS) {
+      if (p.y > c.h) continue; // flying over it
       const dx = p.x - c.x;
       const dz = p.z - c.z;
       const d = Math.hypot(dx, dz);
@@ -1210,7 +1369,10 @@ export class OutpostScene {
       }
     }
     const d = Math.hypot(p.x, p.z);
-    if (d > 140) p.multiplyScalar(140 / d);
+    if (d > 140) {
+      p.x *= 140 / d;
+      p.z *= 140 / d;
+    }
   }
 
   private stepWalker(w: Walker, target: THREE.Vector3, dt: number): boolean {
@@ -1229,94 +1391,186 @@ export class OutpostScene {
     return false;
   }
 
+  private autoWalking = false;
+
+  private canControl(): boolean {
+    const v = this.view;
+    return !this.cinematic && !this.inXR && !v?.bunker && !v?.eva && !this.playerHidden;
+  }
+
+  private moveInput(): THREE.Vector2 {
+    const k = this.keys;
+    const m = new THREE.Vector2(
+      (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0),
+      (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0)
+    ).add(this.touchMove);
+    if (m.lengthSq() > 1) m.normalize();
+    return m;
+  }
+
+  private puff(at: THREE.Vector3, count: number, strength: number): void {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = (0.6 + Math.random() * 1.6) * strength;
+      this.dustPuffs.emit(
+        new THREE.Vector3(at.x + Math.cos(a) * 0.3, at.y + 0.1, at.z + Math.sin(a) * 0.3),
+        new THREE.Vector3(Math.cos(a) * s, 0.4 + Math.random() * 0.9 * strength, Math.sin(a) * s),
+        0.9 + Math.random() * 0.9,
+        0.35 + Math.random() * 0.35,
+        this.dustColor,
+        0.55
+      );
+    }
+  }
+
   private updateCharacters(dt: number): void {
     const v = this.view;
     const low = this.isMoon;
     const p = this.player;
-    let moving = false;
+    const g = this.isMoon ? GRAVITY.moon : GRAVITY.mars;
+    const control = this.canControl();
+    const input = this.moveInput();
+    const wantsJump = this.jumpRequested;
+    this.jumpRequested = false;
+    const wantsThrust = this.thrustKey || this.touchThrust || (this.jumpHeld && this.airborne && this.elapsed - this.jumpAt > 0.28);
 
-    const keyMove = new THREE.Vector2(
-      (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0),
-      (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0) - (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0)
-    );
-    const canDrive = !this.cinematic && !this.inXR && (this.shot === 'avatar' || this.shot === 'helmet') && !v?.bunker && !v?.eva;
-
-    if (canDrive && keyMove.lengthSq() > 0) {
+    if (control && (input.lengthSq() > 0.001 || wantsJump || wantsThrust)) {
       this.manual = true;
-      this.manualIdle = 0;
-      if (this.playerHidden) this.playerHidden = false;
+      if (this.shot !== 'avatar' && this.shot !== 'helmet') this.opts.onTakeControl?.();
+    }
+
+    const desired = new THREE.Vector3();
+    this.autoWalking = false;
+    let walking = false;
+
+    if (v?.bunker && !this.airborne) {
+      // scripted: walk to the shelter and go inside
+      this.vel.set(0, this.vel.y, 0);
+      if (!this.playerHidden && this.stepWalker(p, BUNKER_DOOR, dt)) { this.playerHidden = true; p.idx = -1; }
+      walking = this.autoWalking = !this.playerHidden;
+    } else if (v?.eva && !this.airborne) {
+      this.vel.set(0, this.vel.y, 0);
+      const boardAt = this.rover.position.clone().add(new THREE.Vector3(-1.8, 0, 0));
+      if (!this.playerHidden && this.roverU < 0.001 && this.stepWalker(p, boardAt, dt)) { this.playerHidden = true; p.idx = -2; }
+      walking = this.autoWalking = !this.playerHidden;
+    } else if (this.playerHidden) {
+      // step back out of the bunker / rover once the order is lifted
+      const fromRover = p.idx === -2;
+      if (!fromRover || this.roverU <= 0.0001) {
+        p.pos.copy(fromRover ? ROVER_DOCK.clone().add(new THREE.Vector3(-2, 0, 0)) : BUNKER_DOOR.clone().add(new THREE.Vector3(0, 0, 1)));
+        this.playerHidden = false;
+        p.idx = 8;
+        p.pause = 1.5;
+      }
+    } else if (this.manual && control) {
+      const speed = (this.isMoon ? 3.2 : 2.8) * (this.thrusting ? 1.9 : 1);
       if (this.shot === 'helmet') {
-        p.heading -= keyMove.x * dt * 1.8;
-        const step = keyMove.y * p.speed * 1.3 * dt;
-        p.pos.x += Math.sin(p.heading) * step;
-        p.pos.z += Math.cos(p.heading) * step;
-        moving = keyMove.y !== 0;
-      } else {
+        p.heading -= input.x * dt * 2;
+        desired.set(Math.sin(p.heading), 0, Math.cos(p.heading)).multiplyScalar(input.y * speed);
+      } else if (input.lengthSq() > 0.001) {
         const fwd = new THREE.Vector3();
         this.camera.getWorldDirection(fwd);
         fwd.y = 0;
         fwd.normalize();
         const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-        const dir = fwd.multiplyScalar(keyMove.y).addScaledVector(right, keyMove.x).normalize();
-        const want = Math.atan2(dir.x, dir.z);
-        let d = want - p.heading;
+        desired.copy(fwd.multiplyScalar(input.y)).addScaledVector(right, input.x).multiplyScalar(speed);
+        let d = Math.atan2(desired.x, desired.z) - p.heading;
         d = Math.atan2(Math.sin(d), Math.cos(d));
         p.heading += d * Math.min(1, dt * 10);
-        p.pos.addScaledVector(dir, p.speed * 1.3 * dt);
-        moving = true;
       }
-      this.resolveCollisions(p.pos);
-    } else if (this.manual) {
-      this.manualIdle += dt;
-      if (this.manualIdle > 12 || v?.bunker || v?.eva) {
-        this.manual = false;
-        // resume patrol from the nearest waypoint
-        let best = 0;
-        PATROL.forEach((w, i) => { if (w.distanceToSquared(p.pos) < PATROL[best].distanceToSquared(p.pos)) best = i; });
-        p.idx = best;
-      }
-    } else if (v?.bunker) {
-      if (!this.playerHidden && this.stepWalker(p, BUNKER_DOOR, dt)) { this.playerHidden = true; p.idx = -1; }
-      moving = !this.playerHidden;
-    } else if (v?.eva) {
-      const boardAt = this.rover.position.clone().add(new THREE.Vector3(-1.8, 0, 0));
-      if (!this.playerHidden && this.roverU < 0.001 && this.stepWalker(p, boardAt, dt)) { this.playerHidden = true; p.idx = -2; }
-      moving = !this.playerHidden;
-    } else {
-      if (this.playerHidden) {
-        // step out of wherever we were sheltering
-        p.pos.copy(p.idx === -2 ? ROVER_DOCK.clone().add(new THREE.Vector3(-2, 0, 0)) : BUNKER_DOOR.clone().add(new THREE.Vector3(0, 0, 1)));
-        if (p.idx === -2 && this.roverU > 0.0001) { /* wait for rover to return */ }
-        else { this.playerHidden = false; p.idx = 8; p.pause = 1.5; }
-      } else if (p.pause > 0) {
-        p.pause -= dt;
-      } else if (p.idx >= 0 && this.stepWalker(p, p.path[p.idx], dt)) {
+    } else if (!this.manual) {
+      // idle autopilot: patrol the base until the player takes over
+      if (p.pause > 0) p.pause -= dt;
+      else if (p.idx >= 0 && this.stepWalker(p, p.path[p.idx], dt)) {
         p.pause = 2 + ((p.idx * 7) % 3);
         p.idx = (p.idx + 1) % p.path.length;
-      } else {
-        moving = p.idx >= 0;
+      } else walking = this.autoWalking = p.idx >= 0;
+    }
+
+    // horizontal momentum — less grip while airborne
+    const grip = this.airborne ? 2.2 : 11;
+    const k = Math.min(1, dt * grip);
+    this.vel.x += (desired.x - this.vel.x) * k;
+    this.vel.z += (desired.z - this.vel.z) * k;
+    p.pos.x += this.vel.x * dt;
+    p.pos.z += this.vel.z * dt;
+
+    // jump + jetpack + gravity
+    if (control && wantsJump && !this.airborne) {
+      this.vel.y = this.isMoon ? JUMP_SPEED.moon : JUMP_SPEED.mars;
+      this.airborne = true;
+      this.jumpAt = this.elapsed;
+      soundFx.playJump();
+      this.puff(p.pos, 10, 0.8);
+    }
+    const thrustNow = control && wantsThrust && this.fuel > 0;
+    if (thrustNow !== this.thrusting) soundFx.setThruster(thrustNow);
+    this.thrusting = thrustNow;
+    if (this.thrusting) {
+      this.vel.y += THRUST_ACCEL * dt;
+      this.fuel = Math.max(0, this.fuel - dt / FUEL_BURN_SECONDS);
+      this.airborne = true;
+    }
+    this.vel.y = Math.max(-25, Math.min(7.5, this.vel.y - g * dt));
+    if (p.pos.y > CEILING && this.vel.y > 0) this.vel.y = 0;
+    p.pos.y += this.vel.y * dt;
+
+    this.resolveCollisions(p.pos);
+    const ground = this.heightAt(p.pos.x, p.pos.z);
+    if (p.pos.y <= ground) {
+      if (this.airborne && this.vel.y < -1.6) {
+        const impact = Math.min(2, -this.vel.y / 4);
+        soundFx.playLand(impact);
+        this.puff(new THREE.Vector3(p.pos.x, ground, p.pos.z), 14 + Math.round(impact * 10), 0.6 + impact * 0.5);
+        this.footprints.stamp(p.pos.x + 0.13, ground, p.pos.z, p.heading);
+        this.footprints.stamp(p.pos.x - 0.13, ground, p.pos.z, p.heading);
+      }
+      p.pos.y = ground;
+      this.vel.y = 0;
+      this.airborne = false;
+    } else if (p.pos.y - ground > 0.08) {
+      this.airborne = true;
+    }
+    if (!this.airborne && !this.thrusting) this.fuel = Math.min(1, this.fuel + dt / FUEL_REFILL_SECONDS);
+    // rocket wash kicks up regolith near the ground
+    if (this.thrusting && p.pos.y - ground < 4 && Math.random() < 0.6) this.puff(new THREE.Vector3(p.pos.x, ground, p.pos.z), 2, 1.4);
+
+    const hSpeed = Math.hypot(this.vel.x, this.vel.z);
+    if (hSpeed > 0.3) walking = true;
+    // bootprints
+    if (!this.airborne && walking && !this.playerHidden) {
+      this.stepDist += Math.max(hSpeed, this.autoWalking ? p.speed : 0) * dt;
+      if (this.stepDist > 0.7) {
+        this.stepDist = 0;
+        this.stepSide *= -1;
+        const side = new THREE.Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading)).multiplyScalar(0.13 * this.stepSide);
+        this.footprints.stamp(p.pos.x + side.x, ground, p.pos.z + side.z, p.heading);
       }
     }
 
-    p.pos.y = this.heightAt(p.pos.x, p.pos.z);
     p.rig.group.position.copy(p.pos);
     p.rig.group.rotation.y = p.heading;
     p.rig.group.visible = !this.playerHidden && !(this.shot === 'helmet' && !this.cinematic);
-    p.rig.update(dt, moving, low);
+    p.rig.update(dt, walking, low, this.airborne);
+    this.playerFlames.update(dt, this.thrusting, this.elapsed, this.exhaust);
     this.playerTag.visible = p.rig.group.visible && this.labelsVisible;
+    if (this.playerBubbleTimer > 0) {
+      this.playerBubbleTimer -= dt;
+      if (this.playerBubbleTimer <= 0) this.playerBubble.classList.remove('show');
+    }
 
     for (const n of this.npcs) {
       const hidden = Boolean(v?.bunker);
       n.rig.group.visible = !hidden;
       if (hidden) continue;
-      let walking = false;
+      let w = false;
       if (n.pause > 0) n.pause -= dt;
       else if (this.stepWalker(n, n.path[n.idx], dt)) { n.pause = 3 + Math.random() * 3; n.idx = (n.idx + 1) % n.path.length; }
-      else walking = true;
+      else w = true;
       n.pos.y = this.heightAt(n.pos.x, n.pos.z);
       n.rig.group.position.copy(n.pos);
       n.rig.group.rotation.y = n.heading;
-      n.rig.update(dt, walking, low);
+      n.rig.update(dt, w, low);
     }
   }
 
@@ -1365,8 +1619,20 @@ export class OutpostScene {
       this.followPrev.copy(follow);
     }
     this.controls.update(dt);
-    // never let the camera clip into the ground
-    const ground = this.heightAt(this.camera.position.x, this.camera.position.z) + 1.2;
-    if (this.camera.position.y < ground) this.camera.position.y = ground;
+    // never let the camera clip into the ground or through a building
+    const cam = this.camera.position;
+    const ground = this.heightAt(cam.x, cam.z) + 1.2;
+    if (cam.y < ground) cam.y = ground;
+    for (const c of COLLIDERS) {
+      if (c.r < 2 || cam.y > c.h + 1) continue;
+      const dx = cam.x - c.x;
+      const dz = cam.z - c.z;
+      const d = Math.hypot(dx, dz);
+      const min = c.r + 0.8;
+      if (d < min && d > 1e-4) {
+        cam.x = c.x + (dx / d) * min;
+        cam.z = c.z + (dz / d) * min;
+      }
+    }
   }
 }

@@ -5,6 +5,7 @@ import { allBadges, isMissionUnlocked, MISSION_ORDER, SANDBOX_ID } from '../game
 import { findAvatar } from '../game/avatars';
 import { AvatarBadge } from '../components/AvatarBadge';
 import type { PilotProfile } from '../game/types';
+import { CREW_ERRORS, CrewLink } from '../net/crewLink';
 
 // Node centres (% of the track area). The dashed route is drawn through the same points.
 const NODE_POS: Array<[number, number]> = [[9, 52], [24, 30], [38, 62], [53, 38], [68, 66], [86, 40]];
@@ -23,7 +24,7 @@ function trackPath(): string {
 
 interface Props {
   pilot: PilotProfile;
-  onLaunch: (missionId: string, location: 'moon' | 'mars') => void;
+  onLaunch: (missionId: string, location: 'moon' | 'mars', crew: CrewLink | null) => void;
   onEditAvatar: () => void;
   onSignOut: () => void;
 }
@@ -35,6 +36,23 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
   const avatar = findAvatar(pilot.avatarId, pilot.accentOverride);
   const badges = allBadges(pilot);
   const done = MISSION_ORDER.filter((id) => pilot.completed[id]).length;
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [crewError, setCrewError] = useState<string | null>(null);
+
+  const hostCrew = async (missionId: string, location: 'moon' | 'mars') => {
+    setBusy(true);
+    setCrewError(null);
+    try {
+      const link = await CrewLink.open({ t: 'host', missionId, location, name: pilot.callsign, avatar });
+      soundFx.playSuccess();
+      onLaunch(missionId, location, link);
+    } catch (e) {
+      setCrewError(CREW_ERRORS[(e as Error).message] ?? CREW_ERRORS.unreachable);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const nodes = [...MISSION_CAMPAIGNS.map((m) => ({ id: m.id, loc: m.location as 'moon' | 'mars', title: m.title })), { id: SANDBOX_ID, loc: sandboxLoc, title: 'Sandbox Outpost' }];
   const mission = MISSION_CAMPAIGNS.find((m) => m.id === selected);
@@ -68,6 +86,7 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
             </span>
           ))}
         </div>
+        <button type="button" className="join-crew-btn" onClick={() => { soundFx.playClick(); setJoinOpen(true); }}>👥 Join crew</button>
         <button type="button" className="ghost small" onClick={onSignOut}>Switch pilot</button>
       </header>
 
@@ -126,21 +145,103 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
           ) : null}
 
           {unlocked ? (
-            <button
-              type="button"
-              className="cta"
-              onClick={() => {
-                soundFx.playSuccess();
-                onLaunch(selected, selected === SANDBOX_ID ? sandboxLoc : (mission?.location as 'moon' | 'mars'));
-              }}
-            >
-              {result ? '↻ Fly again' : '▶ Begin briefing'}
-            </button>
+            <div className="launch-group">
+              <button
+                type="button"
+                className="launch-btn"
+                onClick={() => {
+                  soundFx.playSuccess();
+                  onLaunch(selected, selected === SANDBOX_ID ? sandboxLoc : (mission?.location as 'moon' | 'mars'), null);
+                }}
+              >
+                <span className="launch-glow" />
+                🚀 {result ? 'FLY AGAIN' : 'LAUNCH'}
+                <small>solo mission</small>
+              </button>
+              <button
+                type="button"
+                className="ghost host-btn"
+                disabled={busy}
+                onClick={() => hostCrew(selected, selected === SANDBOX_ID ? sandboxLoc : (mission?.location as 'moon' | 'mars'))}
+              >
+                {busy ? 'Opening crew channel…' : '👥 Launch with a crew (up to 4)'}
+              </button>
+              {crewError && <p className="form-error">{crewError}</p>}
+            </div>
           ) : (
             <div className="locked-note">🔒 Complete <b>{prevTitle}</b> to unlock.</div>
           )}
         </aside>
       </div>
+
+      {joinOpen && (
+        <JoinCrewDialog
+          pilot={pilot}
+          onClose={() => setJoinOpen(false)}
+          onJoined={(link) => {
+            const room = link.room!;
+            setJoinOpen(false);
+            onLaunch(room.missionId, room.location, link);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function JoinCrewDialog({ pilot, onClose, onJoined }: { pilot: PilotProfile; onClose: () => void; onJoined: (link: CrewLink) => void }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const join = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const c = code.trim().toUpperCase();
+    if (c.length !== 5) return setError('Crew codes are 5 letters/numbers.');
+    setBusy(true);
+    setError(null);
+    try {
+      const link = await CrewLink.open({ t: 'join', code: c, name: pilot.callsign, avatar: findAvatar(pilot.avatarId, pilot.accentOverride) });
+      const room = link.room!;
+      if (!isMissionUnlocked(pilot, room.missionId)) {
+        link.close();
+        const title = room.missionId === SANDBOX_ID ? 'Sandbox Outpost' : MISSION_CAMPAIGNS.find((m) => m.id === room.missionId)?.title;
+        setError(`That crew is flying ${title}. Unlock it first by finishing the mission before it.`);
+        return;
+      }
+      soundFx.playSuccess();
+      onJoined(link);
+    } catch (err) {
+      setError(CREW_ERRORS[(err as Error).message] ?? CREW_ERRORS.unreachable);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="dialog-backdrop" onClick={onClose}>
+      <form className="join-dialog glass" onClick={(e) => e.stopPropagation()} onSubmit={join}>
+        <span className="eyebrow">CO-OP MISSION</span>
+        <h2>Join a crew</h2>
+        <p>Ask your commander for the 5-letter crew code shown on their screen.</p>
+        <input
+          className="code-input"
+          value={code}
+          onChange={(e) => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5)); setError(null); }}
+          placeholder="K7Q2M"
+          autoFocus
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+          inputMode="text"
+          aria-label="Crew code"
+        />
+        {error && <p className="form-error">{error}</p>}
+        <div className="dialog-actions">
+          <button type="button" className="ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="cta" disabled={busy}>{busy ? 'Docking…' : 'Join →'}</button>
+        </div>
+      </form>
     </div>
   );
 }

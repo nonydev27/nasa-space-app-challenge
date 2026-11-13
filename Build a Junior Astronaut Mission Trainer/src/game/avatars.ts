@@ -42,6 +42,16 @@ export const AVATARS: AvatarConfig[] = [
     skin: '#f1c9a5'
   },
   {
+    id: 'adonis',
+    name: 'Adonis',
+    role: 'Geologist',
+    bio: 'Knows the difference between basalt and gabbro. Can identify a meteorite by touch.',
+    suit: '#f0f0f0',
+    accent: '#e64fa6',
+    visor: '#d9a441',
+    skin: '#c69c7b'
+  },
+  {
     id: 'vega',
     name: 'Vega',
     role: 'Astro-Botanist',

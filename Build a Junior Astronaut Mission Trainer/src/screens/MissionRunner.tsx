@@ -8,26 +8,33 @@ import { PowerMatrix } from '../components/PowerMatrix';
 import { SubsystemDecks } from '../components/SubsystemDecks';
 import { TelemetryLog } from '../components/TelemetryLog';
 import { IncidentAlertBanner } from '../components/IncidentAlertBanner';
-import { AstroBotGuide } from '../components/AstroBotGuide';
 import { NASADataModal } from '../components/NASADataModal';
 import { GlossaryModal } from '../components/GlossaryModal';
 
 import { SceneView } from '../scene/SceneView';
 import type { ModuleId, OutpostScene } from '../scene/OutpostScene';
 import { StoryCinematic } from './StoryCinematic';
+import { LaunchCountdown } from './LaunchCountdown';
 import { Dock, TopBar, VitalsPanel } from '../hud/Hud';
+import { AstroBot, HINT_BONUS, HINT_BUDGET } from '../hud/AstroBot';
+import { JetGauge, TouchControls, useIsTouch } from '../hud/TouchControls';
+import { CrewPanel, Toasts, type Toast } from '../hud/CrewPanel';
 import { findAvatar } from '../game/avatars';
 import { buildIntro, buildOutro, type LiveDonkiEvent } from '../game/storylines';
 import { missionScore, toSceneView, type SimState } from '../game/simBridge';
+import { applyAction, HOST_ONLY, type SimAction } from '../game/actions';
 import { isMissionUnlocked, nextMissionId, recordMissionComplete, SANDBOX_ID } from '../game/profileStore';
+import type { CrewLink, Emote } from '../net/crewLink';
+import { useCrew } from '../net/useCrew';
 import type { Location, PilotProfile, SceneEffects, ShotId, StoryBeat } from '../game/types';
 
-type Phase = 'loading' | 'intro' | 'play' | 'outro' | 'debrief';
+type Phase = 'countdown' | 'loading' | 'intro' | 'play' | 'outro' | 'debrief';
 type Drawer = 'power' | 'systems' | 'log' | null;
 
 interface Outcome {
   success: boolean;
   score: number;
+  hintBonus: number;
   sols: number;
   science: number;
   crewHealth: number;
@@ -40,31 +47,129 @@ interface Props {
   pilot: PilotProfile;
   missionId: string;
   location: Location;
+  crewLink: CrewLink | null;
   onPilotUpdate: (p: PilotProfile) => void;
   onExit: () => void;
   onNext: (missionId: string, location: Location) => void;
 }
 
-export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExit, onNext }: Props) {
+const looksLikeSim = (s: unknown): s is SimState =>
+  Boolean(s && typeof s === 'object' && typeof (s as SimState).sol === 'number' && typeof (s as SimState).toggles === 'object' && typeof (s as SimState).powerAllocations === 'object');
+
+export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpdate, onExit, onNext }: Props) {
   const mission = MISSION_CAMPAIGNS.find((m) => m.id === missionId) ?? null;
   const avatar = useMemo(() => findAvatar(pilot.avatarId, pilot.accentOverride), [pilot.avatarId, pilot.accentOverride]);
+  const touch = useIsTouch();
 
   const [sim, setSim] = useState<SimState>(() => createInitialSimulationState(mission, location, pilot.ageGroup));
-  const [phase, setPhase] = useState<Phase>(missionId === 'mission-3' ? 'loading' : 'intro');
-  const [liveDonki, setLiveDonki] = useState<LiveDonkiEvent[] | null>(null);
+  const [phase, setPhase] = useState<Phase>('countdown');
+  const [liveDonki, setLiveDonki] = useState<LiveDonkiEvent[] | null>(missionId === 'mission-3' ? null : []);
   const [fx, setFx] = useState<SceneEffects | undefined>(undefined);
   const [shot, setShot] = useState<ShotId>('establishing');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [deckTab, setDeckTab] = useState('donki');
   const [labels, setLabels] = useState(true);
+  const [uiMode, setUiMode] = useState(pilot.ageGroup);
   const [muted, setMuted] = useState(() => soundFx.isMuted());
   const [glossary, setGlossary] = useState<{ open: boolean; term: string | null }>({ open: false, term: null });
   const [dataOpen, setDataOpen] = useState(false);
   const [vrOk, setVrOk] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [sceneReady, setSceneReady] = useState(false);
   const sceneRef = useRef<OutpostScene | null>(null);
+  const phaseRef = useRef(phase);
+  useEffect(() => {
+    phaseRef.current = phase;
+  });
 
+  const hintBudget = HINT_BUDGET[pilot.ageGroup];
+
+  const toast = useCallback((text: string) => {
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t.slice(-3), { id, text }]);
+    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800);
+  }, []);
+
+  // ------------------------------------------------------------ multiplayer
+  const crew = useCrew(crewLink, {
+    onAction: (action, by) => setSim((s) => applyAction(s, action, by)),
+    onState: (state, hostPhase) => {
+      if (!looksLikeSim(state)) return;
+      setSim(state);
+      // commander hit Retry → bring everyone back into the mission
+      if ((phaseRef.current === 'outro' || phaseRef.current === 'debrief') && !state.completed && !state.failed && hostPhase === 'play') {
+        setOutcome(null);
+        setShot('overview');
+        setPhase('play');
+      }
+    },
+    onPose: (id, pose) => sceneRef.current?.setPeerPose(id, pose),
+    onEmote: (id, e) => {
+      sceneRef.current?.peerEmote(id, e);
+      const name = crewLink?.room?.peers.find((p) => p.id === id)?.name;
+      if (name) toast(`${name}: ${e}`);
+    },
+    onToast: (t) => {
+      soundFx.playPop();
+      toast(t);
+    }
+  });
+  const multiplayer = crew.online;
+  const authority = crew.authority;
+
+  // keep remote astronauts in the scene in sync with the roster
+  const shownPeers = useRef(new Set<string>());
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!sceneReady || !scene) return;
+    const ids = new Set(crew.peers.map((p) => p.id));
+    for (const p of crew.peers) if (!shownPeers.current.has(p.id)) { scene.addPeer(p.id, p.name, p.avatar); shownPeers.current.add(p.id); }
+    for (const id of [...shownPeers.current]) if (!ids.has(id)) { scene.removePeer(id); shownPeers.current.delete(id); }
+  }, [sceneReady, crew.peers]);
+
+  // stream our astronaut's pose ~10×/s
+  useEffect(() => {
+    if (!multiplayer || !crewLink || crew.peers.length === 0) return;
+    const t = window.setInterval(() => {
+      const pose = sceneRef.current?.getPlayerPose();
+      if (pose) crewLink.sendPose(pose);
+    }, 100);
+    return () => window.clearInterval(t);
+  }, [multiplayer, crewLink, crew.peers.length]);
+
+  // commander broadcasts simulation state (≤5×/s)
+  const lastSent = useRef(0);
+  useEffect(() => {
+    if (!multiplayer || !authority || !crewLink || crew.peers.length === 0) return;
+    const wait = Math.max(0, 200 - (Date.now() - lastSent.current));
+    const t = window.setTimeout(() => {
+      lastSent.current = Date.now();
+      crewLink.sendState(sim, phase === 'play' ? 'play' : phase);
+    }, wait);
+    return () => window.clearTimeout(t);
+  }, [sim, phase, multiplayer, authority, crewLink, crew.peers.length]);
+
+  const dispatch = useCallback(
+    (action: SimAction) => {
+      if (!authority && HOST_ONLY.includes(action.type)) return;
+      setSim((s) => applyAction(s, action, multiplayer ? pilot.callsign : undefined));
+      if (!authority) crewLink?.sendAction(action); // optimistic locally; commander's state confirms
+    },
+    [authority, multiplayer, crewLink, pilot.callsign]
+  );
+
+  const emote = useCallback(
+    (e: Emote) => {
+      sceneRef.current?.playerEmote(e);
+      crewLink?.sendEmote(e);
+    },
+    [crewLink]
+  );
+
+  // ------------------------------------------------------------ story
   const ctx = { callsign: pilot.callsign, avatarName: avatar.name, liveDonki };
   const introBeats = useMemo(() => buildIntro(missionId, ctx), [missionId, pilot.callsign, avatar.name, liveDonki]); // eslint-disable-line react-hooks/exhaustive-deps
   const outroBeats = useMemo<StoryBeat[]>(
@@ -72,21 +177,24 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
     [outcome] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Mission 3 opens with the live DONKI feed — give the API a few seconds, then fall back to the archive.
+  // Mission 3 opens with the live DONKI feed — fetched during the countdown, archive fallback after 5 s.
   useEffect(() => {
-    if (phase !== 'loading') return;
+    if (missionId !== 'mission-3') return;
     let cancelled = false;
     const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
     Promise.race([fetchRecentDonkiEvents(30), timeout])
       .then((events) => { if (!cancelled) setLiveDonki(events as LiveDonkiEvent[]); })
-      .catch(() => { if (!cancelled) setLiveDonki([]); })
-      .finally(() => { if (!cancelled) setPhase('intro'); });
+      .catch(() => { if (!cancelled) setLiveDonki([]); });
     return () => { cancelled = true; };
-  }, [phase]);
+  }, [missionId]);
 
-  // ------------------------------------------------------------ simulation clock
   useEffect(() => {
-    if (phase !== 'play') return;
+    if (phase === 'loading' && liveDonki !== null) setPhase('intro');
+  }, [phase, liveDonki]);
+
+  // ------------------------------------------------------------ simulation clock (authority only)
+  useEffect(() => {
+    if (phase !== 'play' || !authority) return;
     const timer = window.setInterval(() => {
       setSim((prev) => {
         const next = updateSimulationTick(prev, 1);
@@ -109,13 +217,14 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [phase, mission]);
+  }, [phase, mission, authority]);
 
   // ------------------------------------------------------------ end of mission → outro
   useEffect(() => {
     if (phase !== 'play' || (!sim.completed && !sim.failed)) return;
     const success = sim.completed && !sim.failed;
-    const score = missionScore(sim);
+    const hintBonus = Math.max(0, hintBudget - hintsUsed) * HINT_BONUS;
+    const score = missionScore(sim) + hintBonus;
     let unlocked: string | null = null;
     if (success && mission) {
       const before = nextMissionId(mission.id);
@@ -127,19 +236,11 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
     } else {
       soundFx.playEmergency();
     }
-    setOutcome({
-      success,
-      score,
-      sols: sim.sol,
-      science: Math.round(sim.sciencePoints),
-      crewHealth: Math.round(sim.crewHealth),
-      failureReason: sim.failureReason,
-      badges: sim.unlockedBadges,
-      unlocked
-    });
+    soundFx.setThruster(false);
+    setOutcome({ success, score, hintBonus, sols: sim.sol, science: Math.round(sim.sciencePoints), crewHealth: Math.round(sim.crewHealth), failureReason: sim.failureReason, badges: sim.unlockedBadges, unlocked });
     setDrawer(null);
     setPhase('outro');
-  }, [phase, sim, mission, pilot, onPilotUpdate]);
+  }, [phase, sim, mission, pilot, onPilotUpdate, hintBudget, hintsUsed]);
 
   // ------------------------------------------------------------ solar storm drama
   const alertImpacted = Boolean(sim.activeAlert?.impactHandled);
@@ -150,6 +251,7 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
   useEffect(() => {
     if (!alertImpacted) return;
     soundFx.playEmergency();
+    navigator.vibrate?.([120, 60, 220]);
     setFlash(true);
     const t = window.setTimeout(() => setFlash(false), 1600);
     return () => window.clearTimeout(t);
@@ -157,9 +259,12 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
 
   // ------------------------------------------------------------ scene wiring
   const view = useMemo(() => toSceneView(sim, phase === 'play' || phase === 'debrief' ? undefined : fx), [sim, fx, phase]);
+  const simForUi = useMemo(() => ({ ...sim, mode: uiMode }), [sim, uiMode]);
 
   const onSceneReady = useCallback((s: OutpostScene) => {
     sceneRef.current = s;
+    shownPeers.current.clear();
+    setSceneReady(true);
     s.vrSupported().then(setVrOk);
   }, []);
 
@@ -168,11 +273,15 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
     setShot(beat.shot);
   }, []);
 
+  const onTakeControl = useCallback(() => setShot('avatar'), []);
+
+  const afterCountdown = () => setPhase(liveDonki === null ? 'loading' : 'intro');
+
   const startPlay = () => {
     setFx(undefined);
     setShot('overview');
     setPhase('play');
-    if (sim.activeAlert) setDrawer(null);
+    if (!touch) toast('⌨️ WASD to walk · Space to jump · hold Shift for the jetpack');
   };
 
   const onModuleClick = (m: ModuleId) => {
@@ -191,42 +300,21 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
     setShot(t.shot);
   };
 
-  // ------------------------------------------------------------ handlers (ported from the original App)
-  const patch = (fn: (s: SimState) => SimState) => setSim((prev) => fn(prev));
-  const toggles = {
-    pause: () => patch((s) => ({ ...s, paused: !s.paused })),
-    speed: (spd: number) => patch((s) => ({ ...s, speed: spd, paused: false })),
-    mode: () => patch((s) => ({ ...s, mode: s.mode === 'cadet' ? 'director' : 'cadet' })),
-    alloc: (k: string, v: number) => patch((s) => ({ ...s, powerAllocations: { ...s.powerAllocations, [k]: v } })),
-    shield: () =>
-      patch((s) => {
-        const on = !s.toggles.magneticShieldActive;
-        return {
-          ...s,
-          toggles: { ...s.toggles, magneticShieldActive: on },
-          powerAllocations: { ...s.powerAllocations, shields: on ? Math.max(35, s.powerAllocations.shields) : s.powerAllocations.shields }
-        };
-      }),
-    bunker: () =>
-      patch((s) => {
-        const locked = !s.toggles.bunkerLockdown;
-        return { ...s, toggles: { ...s.toggles, bunkerLockdown: locked, roverOnEVA: locked ? false : s.toggles.roverOnEVA } };
-      }),
-    ration: () => patch((s) => ({ ...s, toggles: { ...s.toggles, waterRationing: !s.toggles.waterRationing } })),
-    crops: () => patch((s) => ({ ...s, toggles: { ...s.toggles, highYieldCropCycle: !s.toggles.highYieldCropCycle } })),
-    eva: () => patch((s) => ({ ...s, toggles: { ...s.toggles, roverOnEVA: !s.toggles.roverOnEVA } })),
-    harvest: () =>
-      patch((s) => ({
-        ...s,
-        foodStockpileSols: s.foodStockpileSols + 2,
-        cropGrowthProgress: 0,
-        logs: [{ id: Date.now(), sol: s.sol, hour: '12:00', text: 'Fresh space crop harvest stored! +2 Sols food stockpile added.', type: 'success' }, ...s.logs.slice(0, 30)]
-      }))
+  const act = {
+    pause: () => dispatch({ type: 'pause' }),
+    speed: (value: number) => dispatch({ type: 'speed', value }),
+    alloc: (key: string, value: number) => dispatch({ type: 'alloc', key: key as never, value }),
+    shield: () => dispatch({ type: 'shield' }),
+    bunker: () => dispatch({ type: 'bunker' }),
+    ration: () => dispatch({ type: 'ration' }),
+    crops: () => dispatch({ type: 'crops' }),
+    eva: () => dispatch({ type: 'eva' }),
+    harvest: () => dispatch({ type: 'harvest' })
   };
 
   const openData = () => {
     setDataOpen(true);
-    patch((s) => (s.unlockedBadges.includes('badge_data_scout') ? s : { ...s, unlockedBadges: [...s.unlockedBadges, 'badge_data_scout'] }));
+    setSim((s) => (s.unlockedBadges.includes('badge_data_scout') ? s : { ...s, unlockedBadges: [...s.unlockedBadges, 'badge_data_scout'] }));
   };
   const openGlossary = (term: string | null) => setGlossary({ open: true, term });
 
@@ -251,8 +339,9 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
   };
 
   const retry = () => {
-    setSim(createInitialSimulationState(mission, location, sim.mode));
+    setSim(createInitialSimulationState(mission, location, pilot.ageGroup));
     setOutcome(null);
+    setHintsUsed(0);
     setShot('overview');
     setPhase('play');
   };
@@ -263,7 +352,7 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
   const earnedBadges = BADGE_DEFINITIONS.filter((b) => outcome?.badges.includes(b.id));
 
   return (
-    <div className={`screen mission-screen ${playing ? 'is-playing' : 'is-cinematic'} ${flash ? 'impact' : ''} ${drawer ? 'drawer-open' : ''}`}>
+    <div className={`screen mission-screen ${playing ? 'is-playing' : 'is-cinematic'} ${flash ? 'impact' : ''} ${drawer ? 'drawer-open' : ''} ${touch ? 'touch' : ''} ${multiplayer ? 'crew-on' : ''}`}>
       <SceneView
         location={location}
         avatar={avatar}
@@ -273,10 +362,15 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
         cinematic={!playing}
         showLabels={labels}
         onModuleClick={onModuleClick}
+        onTakeControl={onTakeControl}
         onReady={onSceneReady}
       />
       <div className="vignette" />
       {flash && <div className="impact-flash" />}
+
+      {phase === 'countdown' && (
+        <LaunchCountdown missionTitle={mission?.title ?? 'Sandbox Outpost'} destination={location} onDone={afterCountdown} />
+      )}
 
       {phase === 'loading' && (
         <div className="cine-loading">
@@ -302,23 +396,24 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
       {playing && (
         <>
           <TopBar
-            sim={sim}
+            sim={simForUi}
             mission={mission}
             avatar={avatar}
             callsign={pilot.callsign}
             muted={muted}
             labels={labels}
             vrOk={vrOk}
-            onPause={toggles.pause}
-            onSpeed={toggles.speed}
+            canControlTime={authority}
+            onPause={act.pause}
+            onSpeed={act.speed}
             onMute={() => setMuted(soundFx.toggleMute())}
             onLabels={() => setLabels((l) => !l)}
-            onMode={toggles.mode}
+            onMode={() => setUiMode((m) => (m === 'cadet' ? 'director' : 'cadet'))}
             onData={openData}
             onGlossary={() => openGlossary(null)}
             onFullscreen={fullscreen}
             onVR={enterVR}
-            onExit={() => { if (window.confirm('Leave this mission? Progress in this run will be lost.')) onExit(); }}
+            onExit={() => { if (window.confirm(multiplayer ? 'Leave this mission and your crew?' : 'Leave this mission? Progress in this run will be lost.')) onExit(); }}
           />
           <VitalsPanel sim={sim} mission={mission} onGlossary={openGlossary} />
 
@@ -328,21 +423,14 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
                 alert={sim.activeAlert}
                 state={sim}
                 onOpenDONKI={openData}
-                onResolveAlert={(a: string) => (a === 'bunker' ? toggles.bunker() : toggles.shield())}
+                onResolveAlert={(a: string) => (a === 'bunker' ? act.bunker() : act.shield())}
               />
             </div>
           )}
 
-          <Dock
-            sim={sim}
-            shot={shot}
-            onShot={setShot}
-            onBunker={toggles.bunker}
-            onShield={toggles.shield}
-            onEVA={toggles.eva}
-            onHarvest={toggles.harvest}
-            onRation={toggles.ration}
-          />
+          <Dock sim={sim} shot={shot} onShot={setShot} onBunker={act.bunker} onShield={act.shield} onEVA={act.eva} onHarvest={act.harvest} onRation={act.ration} />
+          <JetGauge sceneRef={sceneRef} touch={touch} />
+          {touch && <TouchControls sceneRef={sceneRef} />}
 
           <aside className={`hud-drawer ${drawer ? 'open' : ''}`}>
             <nav className="drawer-tabs">
@@ -356,17 +444,17 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
             {drawer && (
               <div className="drawer-body">
                 {drawer === 'power' && (
-                  <PowerMatrix state={sim} onUpdateAllocation={toggles.alloc} onToggleShield={toggles.shield} onToggleBunker={toggles.bunker} onGlossaryClick={openGlossary} />
+                  <PowerMatrix state={simForUi} onUpdateAllocation={act.alloc} onToggleShield={act.shield} onToggleBunker={act.bunker} onGlossaryClick={openGlossary} />
                 )}
                 {drawer === 'systems' && (
                   <SubsystemDecks
-                    state={sim}
+                    state={simForUi}
                     activeTab={deckTab}
                     onSelectTab={setDeckTab}
-                    onToggleWaterRationing={toggles.ration}
-                    onToggleHighYieldCrops={toggles.crops}
-                    onHarvestCrops={toggles.harvest}
-                    onToggleRoverEVA={toggles.eva}
+                    onToggleWaterRationing={act.ration}
+                    onToggleHighYieldCrops={act.crops}
+                    onHarvestCrops={act.harvest}
+                    onToggleRoverEVA={act.eva}
                     onGlossaryClick={openGlossary}
                     onOpenNASAData={openData}
                   />
@@ -376,9 +464,24 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
             )}
           </aside>
 
-          {sim.mode === 'cadet' && <AstroBotGuide state={sim} onGlossaryClick={openGlossary} />}
+          <AstroBot sim={sim} left={hintBudget - hintsUsed} total={hintBudget} onUse={() => setHintsUsed((n) => Math.min(hintBudget, n + 1))} />
+
+          {crewLink && crew.code && (
+            <CrewPanel
+              code={crew.code}
+              online={crew.online}
+              you={{ name: pilot.callsign, avatar }}
+              youAreHost={crew.hostId === crew.you}
+              hostId={crew.hostId}
+              peers={crew.peers}
+              onEmote={emote}
+              compact={touch || window.innerHeight < 500}
+            />
+          )}
         </>
       )}
+
+      <Toasts items={toasts} />
 
       {phase === 'debrief' && outcome && (
         <div className="debrief-overlay">
@@ -392,6 +495,10 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
               <div><span>Crew health</span><b>{outcome.crewHealth}%</b></div>
               <div className="hi"><span>Score</span><b>{outcome.score.toLocaleString()}</b></div>
             </div>
+            <p className="hint-bonus">
+              🤖 Hints used {hintsUsed}/{hintBudget}
+              {outcome.hintBonus > 0 && <> · <b>+{outcome.hintBonus}</b> independence bonus</>}
+            </p>
             {earnedBadges.length > 0 && (
               <div className="debrief-badges">
                 {earnedBadges.map((b) => <span key={b.id} title={b.description}>{b.icon} {b.title}</span>)}
@@ -408,8 +515,12 @@ export function MissionRunner({ pilot, missionId, location, onPilotUpdate, onExi
             )}
             <div className="debrief-actions">
               <button type="button" className="ghost" onClick={onExit}>🗺️ Mission map</button>
-              <button type="button" className="ghost" onClick={retry}>↻ Retry</button>
-              {nextMission && (
+              {authority ? (
+                <button type="button" className="ghost" onClick={retry}>↻ {multiplayer ? 'Retry with crew' : 'Retry'}</button>
+              ) : (
+                <span className="waiting-note">Waiting for the commander to retry…</span>
+              )}
+              {nextMission && !multiplayer && (
                 <button type="button" className="cta" onClick={() => onNext(nextMission.id, nextMission.location as Location)}>
                   Next: {nextMission.title.replace(/^Mission \d+: /, '')} →
                 </button>

@@ -17,6 +17,8 @@ interface TopBarProps {
   muted: boolean;
   labels: boolean;
   vrOk: boolean;
+  /** false for crewmates: only the commander controls time */
+  canControlTime: boolean;
   onPause: () => void;
   onSpeed: (s: number) => void;
   onMute: () => void;
@@ -61,9 +63,9 @@ export function TopBar(p: TopBarProps) {
         <span className="time">{formatHour(sim.hour)}</span>
         <span className="cycle">{sim.isDaylight ? '☀️' : '🌙'}</span>
         <div className="speed">
-          <button type="button" className={sim.paused ? 'on' : ''} onClick={p.onPause} title="Pause / resume">{sim.paused ? '▶' : '⏸'}</button>
+          <button type="button" className={sim.paused ? 'on' : ''} onClick={p.onPause} disabled={!p.canControlTime} title={p.canControlTime ? 'Pause / resume' : 'Only the commander controls time'}>{sim.paused ? '▶' : '⏸'}</button>
           {[1, 5, 20].map((s) => (
-            <button key={s} type="button" className={!sim.paused && sim.speed === s ? 'on' : ''} onClick={() => p.onSpeed(s)} title={`Time warp ×${s}`}>
+            <button key={s} type="button" className={!sim.paused && sim.speed === s ? 'on' : ''} onClick={() => p.onSpeed(s)} disabled={!p.canControlTime} title={p.canControlTime ? `Time warp ×${s}` : 'Only the commander controls time'}>
               {s}×
             </button>
           ))}
@@ -174,6 +176,18 @@ export function Dock({ sim, shot, onShot, onBunker, onShield, onEVA, onHarvest, 
         <DockBtn on={t.roverOnEVA} disabled={t.bunkerLockdown} onClick={() => { soundFx.playToggle(!t.roverOnEVA); onEVA(); }} icon="🚙" label="EVA" />
         <DockBtn on={false} disabled={sim.cropGrowthProgress < 70} onClick={() => { soundFx.playSuccess(); onHarvest(); }} icon="🌾" label="Harvest" />
         <DockBtn on={t.waterRationing} onClick={() => { soundFx.playToggle(!t.waterRationing); onRation(); }} icon="💧" label="Ration" />
+        <button
+          type="button"
+          className="dock-btn cam-cycle"
+          onClick={() => {
+            soundFx.playClick();
+            const i = CAMS.findIndex((c) => c.id === shot);
+            onShot(CAMS[(i + 1) % CAMS.length].id);
+          }}
+        >
+          <span>{CAMS.find((c) => c.id === shot)?.icon ?? '🎥'}</span>
+          <small>Camera</small>
+        </button>
       </div>
       <div className="dock-group cams">
         {CAMS.map((c) => (
@@ -183,7 +197,7 @@ export function Dock({ sim, shot, onShot, onBunker, onShield, onEVA, onHarvest, 
           </button>
         ))}
       </div>
-      {walkHint && <div className="walk-hint">⌨️ <b>W A S D</b> to walk{shot === 'helmet' ? ' · drag to look' : ''}</div>}
+      {walkHint && <div className="walk-hint">⌨️ <b>W A S D</b> walk · <b>Space</b> jump · <b>Shift</b> jetpack{shot === 'helmet' ? ' · drag to look' : ''}</div>}
     </div>
   );
 }

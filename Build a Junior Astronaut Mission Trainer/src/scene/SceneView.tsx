@@ -11,20 +11,23 @@ interface Props {
   cinematic: boolean;
   showLabels: boolean;
   onModuleClick?: (m: ModuleId) => void;
+  onTakeControl?: () => void;
   onReady?: (scene: OutpostScene) => void;
 }
 
 /** React host for the imperative three.js outpost. Recreated only when the world itself changes. */
-export function SceneView({ location, avatar, callsign, view, shot, cinematic, showLabels, onModuleClick, onReady }: Props) {
+export function SceneView({ location, avatar, callsign, view, shot, cinematic, showLabels, onModuleClick, onTakeControl, onReady }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<OutpostScene | null>(null);
   const [error, setError] = useState<string | null>(null);
   const clickRef = useRef(onModuleClick);
   const readyRef = useRef(onReady);
+  const takeRef = useRef(onTakeControl);
 
   useEffect(() => {
     clickRef.current = onModuleClick;
     readyRef.current = onReady;
+    takeRef.current = onTakeControl;
   });
 
   useEffect(() => {
@@ -32,7 +35,7 @@ export function SceneView({ location, avatar, callsign, view, shot, cinematic, s
     if (!host) return;
     let s: OutpostScene | null = null;
     try {
-      s = new OutpostScene(host, { location, avatar, callsign, onModuleClick: (m) => clickRef.current?.(m) });
+      s = new OutpostScene(host, { location, avatar, callsign, onModuleClick: (m) => clickRef.current?.(m), onTakeControl: () => takeRef.current?.() });
       setScene(s);
       setError(null);
       readyRef.current?.(s);

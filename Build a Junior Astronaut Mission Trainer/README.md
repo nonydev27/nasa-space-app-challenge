@@ -1,3 +1,32 @@
+# AstroLab: Junior Astronaut Mission Trainer
+
+A landscape 3D mission simulator (React + three.js + TypeScript) for the 2026 NASA Space Apps Challenge.
+Players enlist, pick an astronaut, and unlock five Moon/Mars missions in order, solo or in co-op crews of up to 4.
+
+## Run it
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server with hot reload **and** the multiplayer crew relay |
+| `npm run dev:lan` | Same, reachable from other devices on your Wi-Fi (classroom co-op) |
+| `npm run build && npm start` | Production: serves `dist/` + crew relay on one port (`PORT`, default 8080) |
+| `npm run typecheck` | TypeScript check |
+
+Multiplayer needs the Node server (`dev`, `preview` or `start`); a purely static host such as GitHub Pages
+can't run the relay. To point a static build at a relay hosted elsewhere, set `VITE_CREW_URL=wss://your-host/crew`.
+
+## Controls
+
+| | Keyboard | Touch |
+|---|---|---|
+| Walk | W A S D / arrows | left joystick |
+| Jump | Space | Jump button |
+| Jetpack | hold Shift (or hold Space mid-air) | hold Thrust |
+| Look (helmet cam) | drag | drag |
+| Emotes (co-op) | 1–8 | crew panel |
+
+---
+
 # 🚀 AstroLab: Junior Astronaut Mission Trainer
 ### An Open-Source Deep Space Outpost Simulator Powered by Real NASA Science
 **2026 NASA Space Apps Challenge** · *Challenge: Build a Junior Astronaut Mission Trainer*

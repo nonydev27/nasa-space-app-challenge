@@ -10,7 +10,9 @@ export interface AstronautRig {
   group: THREE.Group;
   /** Head anchor used for the helmet-cam view and name tag */
   head: THREE.Object3D;
-  update(dt: number, moving: boolean, lowGravity: boolean): void;
+  /** Jetpack nozzle anchors (in group space), for exhaust effects */
+  nozzles: THREE.Object3D[];
+  update(dt: number, moving: boolean, lowGravity: boolean, airborne?: boolean): void;
   dispose(): void;
 }
 
@@ -97,14 +99,38 @@ export function buildAstronaut(av: AvatarConfig): AstronautRig {
   armL.rotation.z = 0.12;
   armR.rotation.z = -0.12;
 
+  const nozzles = [0.16, -0.16].map((x) => {
+    const n = new THREE.Object3D();
+    n.position.set(x, 1.0, -0.42);
+    body.add(n);
+    mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.1, 10), dark, n, 0, 0.04, 0);
+    return n;
+  });
+
   let phase = 0;
   let idleT = Math.random() * 10;
 
   return {
     group,
     head,
-    update(dt, moving, lowGravity) {
+    nozzles,
+    update(dt, moving, lowGravity, airborne = false) {
       idleT += dt;
+      if (airborne) {
+        // knees tucked, arms out for balance
+        const ease = Math.min(1, dt * 8);
+        legL.rotation.x += (-0.55 - legL.rotation.x) * ease;
+        legR.rotation.x += (-0.25 - legR.rotation.x) * ease;
+        armL.rotation.x += (-0.5 - armL.rotation.x) * ease;
+        armR.rotation.x += (-0.5 - armR.rotation.x) * ease;
+        armL.rotation.z += (0.7 - armL.rotation.z) * ease;
+        armR.rotation.z += (-0.7 - armR.rotation.z) * ease;
+        body.position.y += (0 - body.position.y) * ease;
+        body.rotation.x += (0.18 - body.rotation.x) * ease;
+        return;
+      }
+      armL.rotation.z += (0.12 - armL.rotation.z) * Math.min(1, dt * 6);
+      armR.rotation.z += (-0.12 - armR.rotation.z) * Math.min(1, dt * 6);
       if (moving) {
         phase += dt * (lowGravity ? 6.2 : 8.5);
         const s = Math.sin(phase);
