@@ -30,6 +30,8 @@ export interface OutpostSceneOptions {
   onModuleClick?: (module: ModuleId) => void;
   /** Fired when the player starts driving their astronaut while the camera isn't following them. */
   onTakeControl?: () => void;
+  /** Fired when the player mounts or dismounts the rover. */
+  onRoverMount?: (mounted: boolean) => void;
 }
 
 export interface PlayerStatus {
@@ -37,6 +39,8 @@ export interface PlayerStatus {
   airborne: boolean;
   thrusting: boolean;
   altitude: number;
+  inRover: boolean;
+  nearRover: boolean;
 }
 
 export type { PeerPose };
@@ -273,6 +277,10 @@ export class OutpostScene {
   private roverWheels: THREE.Group[] = [];
   private roverCurve!: THREE.CatmullRomCurve3;
   private roverU = 0;
+  private inRover = false;
+  private nearRover = false;
+  private roverSpeed = 0;
+  private roverHeading = 0;
   private labels: Partial<Record<ModuleId | 'rtg', HTMLDivElement>> = {};
 
   // characters
@@ -291,7 +299,6 @@ export class OutpostScene {
   private thrusting = false;
   private jumpHeld = false;
   private jumpRequested = false;
-  private jumpAt = 0;
   private thrustKey = false;
   private touchMove = new THREE.Vector2();
   private touchJump = false;
@@ -336,7 +343,7 @@ export class OutpostScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.setSize(w, h);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = this.isMoon ? 1.0 : 1.1;
+    this.renderer.toneMappingExposure = this.isMoon ? 0.9 : 0.95;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.xr.enabled = true;
@@ -355,7 +362,7 @@ export class OutpostScene {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environment = envTex;
-    this.scene.environmentIntensity = 0.3;
+    this.scene.environmentIntensity = 0.16;
     this.disposables.push(envTex, pmrem);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -368,7 +375,7 @@ export class OutpostScene {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.5, 0.82);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.32, 0.4, 0.88);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
@@ -478,7 +485,55 @@ export class OutpostScene {
 
   getPlayerStatus(): PlayerStatus {
     const p = this.player.pos;
-    return { fuel: this.fuel, airborne: this.airborne, thrusting: this.thrusting, altitude: Math.max(0, p.y - this.heightAt(p.x, p.z)) };
+    return {
+      fuel: this.fuel,
+      airborne: this.airborne,
+      thrusting: this.thrusting,
+      altitude: Math.max(0, p.y - this.heightAt(p.x, p.z)),
+      inRover: this.inRover,
+      nearRover: this.nearRover
+    };
+  }
+
+  isDrivingRover(): boolean {
+    return this.inRover;
+  }
+
+  isNearRover(): boolean {
+    return this.nearRover;
+  }
+
+  boardRover(): void {
+    if (this.inRover || this.cinematic || this.playerHidden) return;
+    this.inRover = true;
+    this.nearRover = false;
+    this.setShot('rover', false);
+    soundFx.playToggle(true);
+    this.opts.onRoverMount?.(true);
+  }
+
+  exitRover(): void {
+    if (!this.inRover) return;
+    this.inRover = false;
+    const side = new THREE.Vector3(-Math.cos(this.roverHeading), 0, Math.sin(this.roverHeading)).multiplyScalar(2.4);
+    this.player.pos.copy(this.rover.position).add(side);
+    this.player.pos.y = this.heightAt(this.player.pos.x, this.player.pos.z);
+    this.vel.set(0, 0, 0);
+    this.airborne = false;
+    this.setShot('avatar', false);
+    soundFx.playToggle(false);
+    this.opts.onRoverMount?.(false);
+  }
+
+  toggleRover(): void {
+    if (this.inRover) {
+      this.exitRover();
+    } else {
+      const d = Math.hypot(this.player.pos.x - this.rover.position.x, this.player.pos.z - this.rover.position.z);
+      if (d < 6.0) {
+        this.boardRover();
+      }
+    }
   }
 
   // ---- multiplayer crew
@@ -617,7 +672,7 @@ export class OutpostScene {
   }
 
   private buildLights(): void {
-    this.sunLight = new THREE.DirectionalLight('#fff6e8', 3);
+    this.sunLight = new THREE.DirectionalLight('#fff6e8', 1.8);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
     const sc = this.sunLight.shadow.camera;
@@ -627,8 +682,8 @@ export class OutpostScene {
     this.scene.add(this.sunLight, this.sunLight.target);
 
     this.hemi = this.isMoon
-      ? new THREE.HemisphereLight('#2a3550', '#5d5a56', 0.2)
-      : new THREE.HemisphereLight('#e2b48d', '#6b3b24', 0.6);
+      ? new THREE.HemisphereLight('#2a3550', '#5d5a56', 0.15)
+      : new THREE.HemisphereLight('#e2b48d', '#6b3b24', 0.35);
     this.scene.add(this.hemi);
     this.earthshine = new THREE.AmbientLight(this.isMoon ? '#6f8fd6' : '#4a3a4a', 0);
     this.scene.add(this.earthshine);
@@ -891,6 +946,8 @@ export class OutpostScene {
     const pts = [[10, 10], [22, 30], [5, 52], [-22, 46], [-34, 24], [-14, 20], [4, 16]].map(([x, z]) => new THREE.Vector3(x, this.heightAt(x, z), z));
     this.roverCurve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
     this.placeRover(0, 0);
+    const t0 = this.roverCurve.getTangentAt(0);
+    this.roverHeading = Math.atan2(t0.x, t0.z);
 
     // ---- Artemis lander (the ride home)
     const lander = new THREE.Group();
@@ -1023,6 +1080,8 @@ export class OutpostScene {
     if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
       if (!this.cinematic) e.preventDefault();
       this.keys.add(k);
+    } else if (k === 'e' && !this.cinematic) {
+      this.toggleRover();
     } else if (k === ' ' && !this.cinematic) {
       // stop Space from "clicking" whichever HUD button has focus
       e.preventDefault();
@@ -1085,7 +1144,16 @@ export class OutpostScene {
     const hit = this.raycaster.intersectObjects(this.pickables, true)[0];
     let o: THREE.Object3D | null = hit?.object ?? null;
     while (o && !o.userData.module) o = o.parent;
-    if (o) this.opts.onModuleClick?.(o.userData.module as ModuleId);
+    if (o) {
+      if (o.userData.module === 'rover') {
+        const d = Math.hypot(this.player.pos.x - this.rover.position.x, this.player.pos.z - this.rover.position.z);
+        if (this.inRover || d < 8.0) {
+          this.toggleRover();
+          return;
+        }
+      }
+      this.opts.onModuleClick?.(o.userData.module as ModuleId);
+    }
   };
 
   private bindInput(): void {
@@ -1207,15 +1275,15 @@ export class OutpostScene {
     this.starsMat.opacity = this.isMoon ? 0.9 : Math.max(0, 1 - sunUp * 1.4) * (1 - dustK * 0.8);
 
     // lights
-    const sunI = (this.isMoon ? 3.6 : 2.4) * sunUp * (1 - dustK * 0.72);
-    this.sunLight.intensity = sunI + flareK * pulse * 1.2;
+    const sunI = (this.isMoon ? 2.0 : 1.5) * sunUp * (1 - dustK * 0.72);
+    this.sunLight.intensity = sunI + flareK * pulse * 0.8;
     this.sunLight.color.set('#fff6e8').lerp(new THREE.Color('#ff9a5a'), flareK * 0.5);
     this.sunLight.position.copy(this.sunDir).multiplyScalar(160);
     this.sunLight.castShadow = sunUp > 0.05;
-    this.hemi.intensity = this.isMoon ? 0.12 + 0.18 * sunUp : (0.12 + 0.6 * sunUp) * (1 - dustK * 0.3) + dustK * 0.25;
-    this.earthshine.intensity = (1 - sunUp) * (this.isMoon ? 0.35 : 0.12) + flareK * pulse * 0.15;
+    this.hemi.intensity = this.isMoon ? 0.08 + 0.12 * sunUp : (0.08 + 0.35 * sunUp) * (1 - dustK * 0.3) + dustK * 0.15;
+    this.earthshine.intensity = (1 - sunUp) * (this.isMoon ? 0.22 : 0.08) + flareK * pulse * 0.1;
     this.earthshine.color.set(this.isMoon ? '#6f8fd6' : '#4a3a4a').lerp(new THREE.Color('#ff4a2a'), flareK * 0.6);
-    this.scene.environmentIntensity = 0.12 + 0.25 * sunUp;
+    this.scene.environmentIntensity = 0.08 + 0.12 * sunUp;
 
     if (this.scene.fog instanceof THREE.FogExp2) {
       const day = new THREE.Color('#c99a73').lerp(new THREE.Color('#9a6a48'), dustK);
@@ -1285,9 +1353,9 @@ export class OutpostScene {
     }
     this.solarMat.color.set('#ffffff').lerp(new THREE.Color('#b77a52'), this.dust * 0.6);
 
-    this.windowMat.emissiveIntensity = 0.6 + night * 2.2;
-    this.lampMat.emissiveIntensity = 0.2 + night * 6;
-    this.floodLights.forEach((l) => (l.intensity = night * 65));
+    this.windowMat.emissiveIntensity = 0.5 + night * 1.5;
+    this.lampMat.emissiveIntensity = 0.2 + night * 2.5;
+    this.floodLights.forEach((l) => (l.intensity = night * 24));
     this.beaconMat.emissiveIntensity = blink * 4;
     this.rtgGlowMat.emissiveIntensity = 2 + Math.sin(this.elapsed * 1.7) * 0.6;
     this.rtgLight.intensity = 4 + Math.sin(this.elapsed * 1.7) * 1.2;
@@ -1321,15 +1389,17 @@ export class OutpostScene {
     });
 
     // rover drives its EVA loop once the player has boarded
-    const len = this.roverCurve.getLength();
-    const driving = v.eva && this.playerHidden && this.player.idx === -2;
-    const returning = !v.eva && this.roverU > 0.0001;
-    if (driving || returning) {
-      const prev = this.roverU;
-      this.roverU += (4.2 * dt) / len;
-      if (returning && this.roverU >= 1) this.roverU = 0;
-      else this.roverU %= 1;
-      this.placeRover(this.roverU, (this.roverU - prev + 1) % 1 * len);
+    if (!this.inRover) {
+      const len = this.roverCurve.getLength();
+      const driving = v.eva && this.playerHidden && this.player.idx === -2;
+      const returning = !v.eva && this.roverU > 0.0001;
+      if (driving || returning) {
+        const prev = this.roverU;
+        this.roverU += (4.2 * dt) / len;
+        if (returning && this.roverU >= 1) this.roverU = 0;
+        else this.roverU %= 1;
+        this.placeRover(this.roverU, (this.roverU - prev + 1) % 1 * len);
+      }
     }
 
     // floating telemetry labels
@@ -1338,13 +1408,13 @@ export class OutpostScene {
         const el = this.labels[k];
         if (el && el.innerHTML !== html) el.innerHTML = html;
       };
-      set('power', `<b>☀️ ${Math.round(v.solarKW)} kW</b><span>Solar · battery ${Math.round(v.batteryPct)}%</span>`);
-      set('rtg', `<b>⚛️ ${Math.round(v.rtgKW)} kW</b><span>RTG baseload</span>`);
-      set('eclss', `<b>🫁 O₂ ${Math.round(v.oxygen)}%</b><span>Habitat · ECLSS</span>`);
-      set('greenhouse', `<b>🌱 ${Math.round(v.cropGrowth)}%</b><span>Crop health ${Math.round(v.cropHealth)}%</span>`);
-      set('comms', `<b>📡 ${this.isMoon ? '1.3 s' : '4–24 min'}</b><span>Delay to Earth</span>`);
-      set('rover', v.eva ? '<b>🔬 EVA</b><span>Collecting samples</span>' : '<b>🚙 Docked</b><span>Charging</span>');
-      set('bunker', v.bunker ? '<b>🔒 SEALED</b><span>Crew sheltered</span>' : '<b>🏰 Shelter</b><span>2.5 m regolith</span>');
+      set('power', `<b>SOLAR ${Math.round(v.solarKW)} kW</b><span>Solar · battery ${Math.round(v.batteryPct)}%</span>`);
+      set('rtg', `<b>RTG ${Math.round(v.rtgKW)} kW</b><span>Nuclear baseload</span>`);
+      set('eclss', `<b>ECLSS O₂ ${Math.round(v.oxygen)}%</b><span>Habitat · Life Support</span>`);
+      set('greenhouse', `<b>CROPS ${Math.round(v.cropGrowth)}%</b><span>Health ${Math.round(v.cropHealth)}%</span>`);
+      set('comms', `<b>COMMS ${this.isMoon ? '1.3 s' : '4–24 min'}</b><span>Delay to Earth</span>`);
+      set('rover', this.inRover ? '<b>ROVER ACTIVE</b><span>Player driving</span>' : v.eva ? '<b>EVA SURVEY</b><span>Collecting samples</span>' : '<b>ROVER DOCKED</b><span>Press E to drive</span>');
+      set('bunker', v.bunker ? '<b>BUNKER SEALED</b><span>Crew sheltered</span>' : '<b>STORM BUNKER</b><span>2.5 m regolith</span>');
     }
   }
 
@@ -1428,11 +1498,51 @@ export class OutpostScene {
     const low = this.isMoon;
     const p = this.player;
     const g = this.isMoon ? GRAVITY.moon : GRAVITY.mars;
+
+    if (this.inRover) {
+      this.manual = true;
+      const input = this.moveInput();
+      this.roverHeading -= input.x * 2.5 * dt;
+      const targetSpeed = input.y * (input.y > 0 ? 12.0 : -5.0);
+      this.roverSpeed += (targetSpeed - this.roverSpeed) * Math.min(1, dt * 5.5);
+
+      const fwd = new THREE.Vector3(Math.sin(this.roverHeading), 0, Math.cos(this.roverHeading));
+      this.rover.position.addScaledVector(fwd, this.roverSpeed * dt);
+      this.resolveCollisions(this.rover.position);
+      this.rover.position.y = this.heightAt(this.rover.position.x, this.rover.position.z);
+      this.rover.rotation.y = this.roverHeading;
+
+      const dist = this.roverSpeed * dt;
+      this.roverWheels.forEach((w) => (w.rotation.x += dist / 0.45));
+
+      if (Math.abs(this.roverSpeed) > 1.2 && Math.random() < 0.35) {
+        this.puff(new THREE.Vector3(this.rover.position.x, this.rover.position.y + 0.1, this.rover.position.z), 2, 0.6);
+      }
+
+      p.pos.copy(this.rover.position);
+      p.heading = this.roverHeading;
+      this.vel.set(0, 0, 0);
+      this.airborne = false;
+      this.thrusting = false;
+
+      p.rig.group.position.copy(this.rover.position).add(new THREE.Vector3(0, 1.25, 0.3));
+      p.rig.group.rotation.y = this.roverHeading;
+      p.rig.group.visible = !(this.shot === 'helmet' && !this.cinematic);
+      p.rig.update(dt, false, low, false);
+      this.playerFlames.update(dt, false, this.elapsed, this.exhaust);
+      this.playerTag.visible = false;
+      this.nearRover = false;
+      return;
+    }
+
+    const dRover = Math.hypot(p.pos.x - this.rover.position.x, p.pos.z - this.rover.position.z);
+    this.nearRover = dRover < 4.8 && !this.playerHidden;
+
     const control = this.canControl();
     const input = this.moveInput();
     const wantsJump = this.jumpRequested;
     this.jumpRequested = false;
-    const wantsThrust = this.thrustKey || this.touchThrust || (this.jumpHeld && this.airborne && this.elapsed - this.jumpAt > 0.28);
+    const wantsThrust = this.thrustKey || this.touchThrust;
 
     if (control && (input.lengthSq() > 0.001 || wantsJump || wantsThrust)) {
       this.manual = true;
@@ -1499,7 +1609,6 @@ export class OutpostScene {
     if (control && wantsJump && !this.airborne) {
       this.vel.y = this.isMoon ? JUMP_SPEED.moon : JUMP_SPEED.mars;
       this.airborne = true;
-      this.jumpAt = this.elapsed;
       soundFx.playJump();
       this.puff(p.pos, 10, 0.8);
     }

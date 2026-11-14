@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { Flame, ArrowUp, Car, User } from 'lucide-react';
 import type { OutpostScene, PlayerStatus } from '../scene/OutpostScene';
 
 /** True on phones/tablets (coarse pointer) — re-evaluated if a touchscreen laptop switches modes. */
@@ -21,7 +22,18 @@ const RADIUS = 52;
 export function TouchControls({ sceneRef }: { sceneRef: RefObject<OutpostScene | null> }) {
   const baseRef = useRef<HTMLDivElement>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0, active: false });
+  const [roverState, setRoverState] = useState({ inRover: false, nearRover: false });
   const pointerId = useRef<number | null>(null);
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const s = sceneRef.current?.getPlayerStatus();
+      if (s) {
+        setRoverState((prev) => (prev.inRover !== s.inRover || prev.nearRover !== s.nearRover ? { inRover: s.inRover, nearRover: s.nearRover } : prev));
+      }
+    }, 150);
+    return () => window.clearInterval(t);
+  }, [sceneRef]);
 
   const move = (e: ReactPointerEvent) => {
     const rect = baseRef.current?.getBoundingClientRect();
@@ -73,12 +85,26 @@ export function TouchControls({ sceneRef }: { sceneRef: RefObject<OutpostScene |
         <i style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
       </div>
       <div className="touch-buttons">
+        {(roverState.nearRover || roverState.inRover) && (
+          <button
+            type="button"
+            className={`tb rover-btn ${roverState.inRover ? 'in-rover' : ''}`}
+            onClick={() => {
+              navigator.vibrate?.(20);
+              sceneRef.current?.toggleRover();
+            }}
+            aria-label={roverState.inRover ? 'Exit Rover' : 'Drive Rover'}
+          >
+            <span>{roverState.inRover ? <User size={20} /> : <Car size={20} />}</span>
+            <small>{roverState.inRover ? 'Exit' : 'Drive'}</small>
+          </button>
+        )}
         <button type="button" className="tb thrust" {...hold('thrust')} aria-label="Jetpack thrust (hold)">
-          <span>🔥</span>
+          <span><Flame size={20} /></span>
           <small>Thrust</small>
         </button>
         <button type="button" className="tb jump" {...hold('jump')} aria-label="Jump">
-          <span>⤒</span>
+          <span><ArrowUp size={20} /></span>
           <small>Jump</small>
         </button>
       </div>
@@ -88,21 +114,39 @@ export function TouchControls({ sceneRef }: { sceneRef: RefObject<OutpostScene |
 
 /** Jetpack fuel + altitude readout, polled straight from the scene so the rest of the HUD doesn't re-render. */
 export function JetGauge({ sceneRef, touch }: { sceneRef: RefObject<OutpostScene | null>; touch: boolean }) {
-  const [st, setSt] = useState<PlayerStatus>({ fuel: 1, airborne: false, thrusting: false, altitude: 0 });
+  const [st, setSt] = useState<PlayerStatus>({ fuel: 1, airborne: false, thrusting: false, altitude: 0, inRover: false, nearRover: false });
   useEffect(() => {
     const t = window.setInterval(() => {
       const s = sceneRef.current?.getPlayerStatus();
-      if (s) setSt((prev) => (Math.abs(prev.fuel - s.fuel) > 0.005 || prev.airborne !== s.airborne || prev.thrusting !== s.thrusting || Math.abs(prev.altitude - s.altitude) > 0.1 ? s : prev));
+      if (s) setSt((prev) => (Math.abs(prev.fuel - s.fuel) > 0.005 || prev.airborne !== s.airborne || prev.thrusting !== s.thrusting || Math.abs(prev.altitude - s.altitude) > 0.1 || prev.inRover !== s.inRover || prev.nearRover !== s.nearRover ? s : prev));
     }, 100);
     return () => window.clearInterval(t);
   }, [sceneRef]);
   const pct = Math.round(st.fuel * 100);
   return (
-    <div className={`jet-gauge ${st.thrusting ? 'firing' : ''} ${pct < 20 ? 'low' : ''} ${st.airborne || pct < 100 ? 'show' : ''}`}>
-      <span className="jg-icon">🔥</span>
-      <div className="jg-track"><i style={{ width: `${pct}%` }} /></div>
-      <span className="jg-val">{st.airborne ? `${st.altitude.toFixed(1)} m` : `${pct}%`}</span>
-      {!touch && <span className="jg-keys"><kbd>Space</kbd> jump · hold <kbd>Shift</kbd> thrust</span>}
+    <div className="jet-hud-cluster">
+      {st.inRover && (
+        <div className="rover-hud-badge">
+          <Car size={16} />
+          <span>DRIVING ROVER · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>E</kbd> exit</span>
+        </div>
+      )}
+      {!st.inRover && st.nearRover && (
+        <button
+          type="button"
+          className="rover-hud-badge prompt"
+          onClick={() => sceneRef.current?.toggleRover()}
+        >
+          <Car size={16} />
+          <span><b>[E] Board Rover</b> · Click or press E to drive</span>
+        </button>
+      )}
+      <div className={`jet-gauge ${st.thrusting ? 'firing' : ''} ${pct < 20 ? 'low' : ''} ${st.airborne || pct < 100 ? 'show' : ''}`}>
+        <span className="jg-icon"><Flame size={14} /></span>
+        <div className="jg-track"><i style={{ width: `${pct}%` }} /></div>
+        <span className="jg-val">{st.airborne ? `${st.altitude.toFixed(1)} m` : `${pct}%`}</span>
+        {!touch && <span className="jg-keys"><kbd>Space</kbd> jump · hold <kbd>Shift</kbd> thrust</span>}
+      </div>
     </div>
   );
 }

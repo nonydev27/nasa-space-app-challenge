@@ -1,4 +1,18 @@
 import React, { useState } from 'react';
+import {
+  Sun,
+  Wind,
+  Sprout,
+  Radio,
+  AlertTriangle,
+  AlertOctagon,
+  Droplets,
+  Zap,
+  FlaskConical,
+  Car,
+  BatteryCharging,
+  Wheat
+} from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 import { REAL_DONKI_EVENTS, REAL_OSDR_STUDIES } from '../utils/nasaData';
 
@@ -18,7 +32,7 @@ export function SubsystemDecks({
   const CROPS = {
     microgreens: {
       name: "Radish & Mustard Microgreens",
-      icon: "🌱",
+      icon: <Sprout size={20} color="#3ddc97" />,
       growthSpeed: "Fast (4 Sols)",
       waterUsage: "Low",
       nutrition: "Rich in Vitamin C & Antioxidants (Mitigates SANS eye damage)",
@@ -26,7 +40,7 @@ export function SubsystemDecks({
     },
     potatoes: {
       name: "Martian Russet Potatoes",
-      icon: "🥔",
+      icon: <Wheat size={20} color="#ffb547" />,
       growthSpeed: "Slow (8 Sols)",
       waterUsage: "High",
       nutrition: "High Caloric Energy (Protects bone/muscle mass)",
@@ -34,7 +48,7 @@ export function SubsystemDecks({
     },
     spirulina: {
       name: "Spirulina Cyanobacteria Algae",
-      icon: "🧪",
+      icon: <FlaskConical size={20} color="#38d9ff" />,
       growthSpeed: "Ultra-Fast (2 Sols)",
       waterUsage: "Recycled Closed Loop",
       nutrition: "70% Protein by dry weight & generates pure O2",
@@ -54,7 +68,7 @@ export function SubsystemDecks({
             onSelectTab('donki');
           }}
         >
-          <span className="tab-icon">☀️</span>
+          <span className="tab-icon"><Sun size={16} /></span>
           <span>Space Weather (DONKI)</span>
           {state.activeAlert?.source === 'DONKI' && <span className="tab-alert-badge">ALERT</span>}
         </button>
@@ -67,7 +81,7 @@ export function SubsystemDecks({
             onSelectTab('eclss');
           }}
         >
-          <span className="tab-icon">🫁</span>
+          <span className="tab-icon"><Wind size={16} /></span>
           <span>Life Support (ECLSS)</span>
         </button>
 
@@ -79,9 +93,9 @@ export function SubsystemDecks({
             onSelectTab('greenhouse');
           }}
         >
-          <span className="tab-icon">🌱</span>
+          <span className="tab-icon"><Sprout size={16} /></span>
           <span>Food Bay (OSDR)</span>
-          {state.cropGrowthProgress >= 99 && <span className="tab-ready-badge">HARVEST</span>}
+          {state.cropGrowthProgress >= 70 && <span className="tab-ready-badge">HARVEST</span>}
         </button>
 
         <button
@@ -92,7 +106,7 @@ export function SubsystemDecks({
             onSelectTab('comms');
           }}
         >
-          <span className="tab-icon">📡</span>
+          <span className="tab-icon"><Radio size={16} /></span>
           <span>Comms & Rover</span>
           {state.toggles.roverOnEVA && <span className="tab-eva-badge">EVA</span>}
         </button>
@@ -105,7 +119,10 @@ export function SubsystemDecks({
           <div className="deck-panel donki-panel">
             <div className="panel-header-row">
               <div>
-                <h4>☀️ NASA DONKI Space Weather Telemetry</h4>
+                <h4>
+                  <Sun size={17} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  NASA DONKI Space Weather Telemetry
+                </h4>
                 <p className="panel-sub">
                   Solar wind speed, Coronal Mass Ejection (CME) trajectories, and radiation storm alarms.
                 </p>
@@ -126,7 +143,14 @@ export function SubsystemDecks({
                   {state.radiationDoseRate.toFixed(2)} mSv/h
                 </span>
                 <span className="box-note">
-                  {state.radiationDoseRate < 0.1 ? 'Normal deep space background' : '⚠️ Elevated solar particle storm'}
+                  {state.radiationDoseRate < 0.1 ? (
+                    'Normal deep space background'
+                  ) : (
+                    <>
+                      <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                      Elevated solar particle storm
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -149,7 +173,14 @@ export function SubsystemDecks({
             <div className={`donki-event-card ${state.activeAlert?.source === 'DONKI' ? 'alerting' : 'calm'}`}>
               <div className="event-badge-row">
                 <span className="event-type-tag">
-                  {state.activeAlert?.source === 'DONKI' ? '🚨 LIVE SOLAR EVENT' : 'ARCHIVED DONKI EVENT LOG'}
+                  {state.activeAlert?.source === 'DONKI' ? (
+                    <>
+                      <AlertOctagon size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                      LIVE SOLAR EVENT
+                    </>
+                  ) : (
+                    'ARCHIVED DONKI EVENT LOG'
+                  )}
                 </span>
                 <span className="event-id">AR3664 / X9.3 Flare</span>
               </div>
@@ -158,21 +189,29 @@ export function SubsystemDecks({
                 When a giant solar flare bursts, X-rays arrive at the speed of light (8 minutes to Earth/Moon, 12 minutes to Mars). High-energy protons follow within 30 to 90 minutes. 
                 Astronauts caught outside without shielding face acute radiation sickness!
               </p>
-              <div className="recommended-action-box">
-                <strong>Recommended Protocol:</strong> Seal crew inside the underground regolith storm bunker until proton flux normalizes.
+
+              <div className="donki-facts-accordion">
+                <strong>Real NASA Data Connection:</strong>
+                <ul>
+                  <li>NASA DONKI monitors Coronal Mass Ejections and Solar Energetic Particle (SEP) events worldwide.</li>
+                  <li>Instruments on Parker Solar Probe, SOHO, and STEREO satellites calculate arrival time down to the minute.</li>
+                </ul>
               </div>
             </div>
           </div>
         )}
 
-        {/* ================= 2. LIFE SUPPORT (ECLSS) ================= */}
+        {/* ================= 2. ECLSS LIFE SUPPORT ================= */}
         {activeTab === 'eclss' && (
           <div className="deck-panel eclss-panel">
             <div className="panel-header-row">
               <div>
-                <h4>🫁 ECLSS: Environmental Control & Life Support</h4>
+                <h4>
+                  <Wind size={17} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  Environmental Control & Life Support System (ECLSS)
+                </h4>
                 <p className="panel-sub">
-                  Circular air revitalizer, Sabatier carbon scrubber, and closed-loop water processor.
+                  Atmospheric loop, Bosch/Sabatier CO2 reduction, and water purification processors.
                 </p>
               </div>
               <button
@@ -184,48 +223,42 @@ export function SubsystemDecks({
               </button>
             </div>
 
-            <div className="eclss-meters-row">
-              <div className="eclss-meter">
-                <span className="meter-label">Cabin Oxygen</span>
-                <span className="meter-val">{Math.round(state.oxygenLevel)}%</span>
-                <div className="meter-bar-track">
-                  <div
-                    className={`meter-bar-fill ${state.oxygenLevel < 50 ? 'red' : 'cyan'}`}
-                    style={{ width: `${state.oxygenLevel}%` }}
-                  />
-                </div>
-                <span className="meter-hint">Target: 21% Partial Pressure (Safe)</span>
+            <div className="eclss-meters-grid">
+              <div className="eclss-card">
+                <span className="eclss-card-label">OXYGEN CONCENTRATION</span>
+                <span className={`eclss-card-val ${state.oxygenLevel < 75 ? 'red' : 'green'}`}>
+                  {Math.round(state.oxygenLevel)}%
+                </span>
+                <span className="eclss-card-detail">Nominal: 90–98% | Target: 21 kPa ppO2</span>
               </div>
 
-              <div className="eclss-meter">
-                <span className="meter-label">Carbon Dioxide</span>
-                <span className="meter-val">{Math.round(state.co2LevelPpm)} ppm</span>
-                <div className="meter-bar-track">
-                  <div
-                    className={`meter-bar-fill ${state.co2LevelPpm > 1000 ? 'red' : 'green'}`}
-                    style={{ width: `${Math.min(100, (state.co2LevelPpm / 2000) * 100)}%` }}
-                  />
-                </div>
-                <span className="meter-hint">&lt;600 ppm ideal, &gt;1000 causes headache</span>
+              <div className="eclss-card">
+                <span className="eclss-card-label">CARBON DIOXIDE LEVEL</span>
+                <span className={`eclss-card-val ${state.co2LevelPpm > 1200 ? 'red' : 'green'}`}>
+                  {Math.round(state.co2LevelPpm)} ppm
+                </span>
+                <span className="eclss-card-detail">Toxicity threshold: 2,000 ppm</span>
               </div>
 
-              <div className="eclss-meter">
-                <span className="meter-label">Water Recycled</span>
-                <span className="meter-val">{Math.round(state.waterLevel)}%</span>
-                <div className="meter-bar-track">
-                  <div
-                    className="meter-bar-fill blue"
-                    style={{ width: `${state.waterLevel}%` }}
-                  />
-                </div>
-                <span className="meter-hint">Recycles moisture from air & hygiene</span>
+              <div className="eclss-card">
+                <span className="eclss-card-label">CABIN PRESSURE</span>
+                <span className="eclss-card-val">{state.cabinPressureKPa.toFixed(1)} kPa</span>
+                <span className="eclss-card-detail">Standard Sea Level: 101.3 kPa</span>
+              </div>
+
+              <div className="eclss-card">
+                <span className="eclss-card-label">RECYCLED WATER STORAGE</span>
+                <span className={`eclss-card-val ${state.waterLevel < 35 ? 'red' : 'green'}`}>
+                  {Math.round(state.waterLevel)}%
+                </span>
+                <span className="eclss-card-detail">Urine Processor Assembly (UPA) recovery: 98%</span>
               </div>
             </div>
 
-            {/* ECLSS Controls */}
-            <div className="eclss-controls-card">
-              <div className="control-desc-col">
-                <strong>Water Conservation Mode:</strong>
+            {/* Water Rationing Toggle */}
+            <div className="rationing-control-row">
+              <div>
+                <strong>Water Rationing Policy:</strong>
                 <p>
                   Rations water usage across the habitat. Reduces water consumption by 50%, but slightly lowers crew morale over time.
                 </p>
@@ -238,7 +271,8 @@ export function SubsystemDecks({
                   onToggleWaterRationing();
                 }}
               >
-                {state.toggles.waterRationing ? '💧 WATER RATIONING ACTIVE' : 'RATION WATER RESERVES'}
+                <Droplets size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                {state.toggles.waterRationing ? 'WATER RATIONING ACTIVE' : 'RATION WATER RESERVES'}
               </button>
             </div>
           </div>
@@ -249,7 +283,10 @@ export function SubsystemDecks({
           <div className="deck-panel greenhouse-panel">
             <div className="panel-header-row">
               <div>
-                <h4>🌱 Hydroponic Food Bay (NASA OSDR Space Biology)</h4>
+                <h4>
+                  <Sprout size={17} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  Hydroponic Food Bay (NASA OSDR Space Biology)
+                </h4>
                 <p className="panel-sub">
                   Cultivate crops in lunar/martian regolith using LED spectrum optimization.
                 </p>
@@ -288,7 +325,8 @@ export function SubsystemDecks({
               <div className="crop-info-text">
                 <strong>Nutrition & Health Benefit:</strong> {CROPS[selectedCrop].nutrition}
                 <div className="osdr-badge">
-                  🔬 <strong>NASA OSDR Finding:</strong> {CROPS[selectedCrop].osdrRef}
+                  <FlaskConical size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  <strong>NASA OSDR Finding:</strong> {CROPS[selectedCrop].osdrRef}
                 </div>
               </div>
 
@@ -311,9 +349,10 @@ export function SubsystemDecks({
                     soundFx.playSuccess();
                     onHarvestCrops();
                   }}
-                  disabled={state.cropGrowthProgress < 95}
+                  disabled={state.cropGrowthProgress < 70}
                 >
-                  🌾 {state.cropGrowthProgress >= 95 ? 'HARVEST CROPS (+2 Sols Food)' : 'GROWING (Requires Power & Water)'}
+                  <Wheat size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  {state.cropGrowthProgress >= 70 ? 'HARVEST CROPS (+2 Sols Food)' : 'GROWING (Requires Power & Water)'}
                 </button>
               </div>
             </div>
@@ -332,7 +371,8 @@ export function SubsystemDecks({
                   onToggleHighYieldCrops();
                 }}
               >
-                {state.toggles.highYieldCropCycle ? '⚡ HIGH-YIELD BOOST ON' : 'ENABLE HIGH-YIELD BOOST'}
+                <Zap size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                {state.toggles.highYieldCropCycle ? 'HIGH-YIELD BOOST ON' : 'ENABLE HIGH-YIELD BOOST'}
               </button>
             </div>
           </div>
@@ -343,7 +383,10 @@ export function SubsystemDecks({
           <div className="deck-panel comms-panel">
             <div className="panel-header-row">
               <div>
-                <h4>📡 Deep Space Network & Surface Rover</h4>
+                <h4>
+                  <Radio size={17} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  Deep Space Network & Surface Rover
+                </h4>
                 <p className="panel-sub">
                   Simulate speed-of-light radio delay and command autonomous exploration rovers.
                 </p>
@@ -374,7 +417,9 @@ export function SubsystemDecks({
             {/* Surface Rover Control */}
             <div className="rover-mission-card">
               <div className="rover-header">
-                <span className="rover-badge-icon">🚜</span>
+                <span className="rover-badge-icon">
+                  <Car size={24} color="#38d9ff" />
+                </span>
                 <div>
                   <h5>Autonomous Surface Exploration Rover</h5>
                   <p>Send the rover across the crater to drill samples and map water ice.</p>
@@ -382,7 +427,22 @@ export function SubsystemDecks({
               </div>
 
               <div className="rover-stats-row">
-                <span>Status: <strong>{state.toggles.roverOnEVA ? '🚀 Surface Sortie (Drilling Samples)' : '🔋 Docked at Airlock (Recharging)'}</strong></span>
+                <span>
+                  Status:{' '}
+                  <strong>
+                    {state.toggles.roverOnEVA ? (
+                      <>
+                        <Car size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                        Surface Sortie (Drilling Samples)
+                      </>
+                    ) : (
+                      <>
+                        <BatteryCharging size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                        Docked at Airlock (Recharging)
+                      </>
+                    )}
+                  </strong>
+                </span>
                 <span>Power Draw: {state.toggles.roverOnEVA ? '12 kW' : '0 kW'}</span>
                 <span>Research Rate: {state.toggles.roverOnEVA ? '+1.8 Science/hr' : '+0.5 Science/hr'}</span>
               </div>
@@ -400,7 +460,10 @@ export function SubsystemDecks({
                   {state.toggles.roverOnEVA ? 'RECALL ROVER TO DOCK' : 'DEPLOY ROVER ON SURFACE EVA'}
                 </button>
                 {state.activeAlert?.source === 'DONKI' && (
-                  <span className="rover-hazard-note">⚠️ Cannot deploy during DONKI Solar Storm!</span>
+                  <span className="rover-hazard-note">
+                    <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                    Cannot deploy during DONKI Solar Storm!
+                  </span>
                 )}
               </div>
             </div>

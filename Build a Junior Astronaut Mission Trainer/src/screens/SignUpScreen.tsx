@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { User, Award } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 import { callsignTaken, createPilot, deletePilot, loadPilots, setActivePilot } from '../game/profileStore';
 import { findAvatar } from '../game/avatars';
@@ -78,11 +79,11 @@ export function SignUpScreen({ onSignedIn }: Props) {
           <fieldset className="age-choice">
             <legend>Training track</legend>
             <button type="button" className={ageGroup === 'cadet' ? 'on' : ''} onClick={() => { soundFx.playClick(); setAgeGroup('cadet'); }}>
-              <b>🧑‍🚀 Cadet</b>
+              <b><User size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} /> Cadet</b>
               <small>Ages 7–9 · AstroBot guides you</small>
             </button>
             <button type="button" className={ageGroup === 'director' ? 'on' : ''} onClick={() => { soundFx.playClick(); setAgeGroup('director'); }}>
-              <b>🎛️ Flight Director</b>
+              <b><Award size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} /> Flight Director</b>
               <small>Ages 10+ · full telemetry</small>
             </button>
           </fieldset>

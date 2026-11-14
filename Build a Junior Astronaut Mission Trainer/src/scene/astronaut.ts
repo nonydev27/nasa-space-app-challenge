@@ -20,21 +20,22 @@ export function buildAstronaut(av: AvatarConfig): AstronautRig {
   const group = new THREE.Group();
   group.name = `astronaut-${av.id}`;
 
-  const suit = new THREE.MeshStandardMaterial({ color: av.suit, roughness: 0.78, metalness: 0.02 });
-  const accent = new THREE.MeshStandardMaterial({ color: av.accent, roughness: 0.55, metalness: 0.1 });
-  const dark = new THREE.MeshStandardMaterial({ color: '#2b3038', roughness: 0.6, metalness: 0.35 });
-  const metal = new THREE.MeshStandardMaterial({ color: '#b8bec6', roughness: 0.3, metalness: 0.85 });
-  const skin = new THREE.MeshStandardMaterial({ color: av.skin, roughness: 0.65 });
+  const suitColor = new THREE.Color(av.suit).multiplyScalar(0.82);
+  const suit = new THREE.MeshStandardMaterial({ color: suitColor, roughness: 0.84, metalness: 0.02 });
+  const accent = new THREE.MeshStandardMaterial({ color: av.accent, roughness: 0.6, metalness: 0.08 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#2b3038', roughness: 0.65, metalness: 0.3 });
+  const metal = new THREE.MeshStandardMaterial({ color: '#b8bec6', roughness: 0.35, metalness: 0.8 });
+  const skin = new THREE.MeshStandardMaterial({ color: av.skin, roughness: 0.7 });
   const visor = new THREE.MeshPhysicalMaterial({
     color: av.visor,
-    metalness: 0.95,
-    roughness: 0.06,
-    clearcoat: 1,
-    clearcoatRoughness: 0.05,
+    metalness: 0.9,
+    roughness: 0.12,
+    clearcoat: 0.7,
+    clearcoatRoughness: 0.08,
     transparent: true,
     opacity: 0.72
   });
-  const lamp = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#fff4d6', emissiveIntensity: 2.2 });
+  const lamp = new THREE.MeshStandardMaterial({ color: '#f0ece1', emissive: '#ffecbe', emissiveIntensity: 0.45 });
   const materials = [suit, accent, dark, metal, skin, visor, lamp];
   const geometries: THREE.BufferGeometry[] = [];
 
@@ -68,7 +69,7 @@ export function buildAstronaut(av: AvatarConfig): AstronautRig {
   head.position.set(0, 1.84, 0.02);
   body.add(head);
   // Shell is built in three pieces so the front stays open behind the visor (+Z is forward).
-  const shell = new THREE.MeshStandardMaterial({ color: av.suit, roughness: 0.5, side: THREE.DoubleSide });
+  const shell = new THREE.MeshStandardMaterial({ color: suitColor, roughness: 0.82, side: THREE.DoubleSide });
   materials.push(shell);
   const P = Math.PI;
   mesh(new THREE.SphereGeometry(0.235, 28, 20, P * 0.92, P * 1.16), shell, head); // back

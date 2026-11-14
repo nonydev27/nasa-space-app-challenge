@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Sparkles, X } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 import { NASA_GLOSSARY } from '../utils/nasaData';
 
@@ -32,7 +33,7 @@ export function GlossaryModal({ isOpen, onClose, initialTerm = /** @type {string
               onClose();
             }}
           >
-            ×
+            <X size={18} />
           </button>
         </div>
 
@@ -69,7 +70,9 @@ export function GlossaryModal({ isOpen, onClose, initialTerm = /** @type {string
             <h4>{activeEntry.title}</h4>
             <p className="glossary-def">{activeEntry.definition}</p>
             <div className="did-you-know-card">
-              <span className="star-icon">✨</span>
+              <span className="star-icon">
+                <Sparkles size={16} color="#ffd700" />
+              </span>
               <div>
                 <strong>Did You Know?</strong>
                 <p>{activeEntry.didYouKnow}</p>

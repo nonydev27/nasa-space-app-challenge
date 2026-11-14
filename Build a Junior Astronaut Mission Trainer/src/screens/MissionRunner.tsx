@@ -10,6 +10,8 @@ import { TelemetryLog } from '../components/TelemetryLog';
 import { IncidentAlertBanner } from '../components/IncidentAlertBanner';
 import { NASADataModal } from '../components/NASADataModal';
 import { GlossaryModal } from '../components/GlossaryModal';
+import { MissionGuidelinesModal } from '../components/MissionGuidelinesModal';
+import { Zap, FlaskConical, Activity, ClipboardList, Bot, Unlock, Map, RotateCcw, ChevronRight } from 'lucide-react';
 
 import { SceneView } from '../scene/SceneView';
 import type { ModuleId, OutpostScene } from '../scene/OutpostScene';
@@ -74,6 +76,7 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
   const [muted, setMuted] = useState(() => soundFx.isMuted());
   const [glossary, setGlossary] = useState<{ open: boolean; term: string | null }>({ open: false, term: null });
   const [dataOpen, setDataOpen] = useState(false);
+  const [guidelinesOpen, setGuidelinesOpen] = useState(false);
   const [vrOk, setVrOk] = useState(false);
   const [flash, setFlash] = useState(false);
   const [hintsUsed, setHintsUsed] = useState(0);
@@ -363,6 +366,9 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
         showLabels={labels}
         onModuleClick={onModuleClick}
         onTakeControl={onTakeControl}
+        onRoverMount={(mounted) => {
+          if (mounted && !sim.toggles.roverOnEVA) act.eva();
+        }}
         onReady={onSceneReady}
       />
       <div className="vignette" />
@@ -411,6 +417,7 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
             onMode={() => setUiMode((m) => (m === 'cadet' ? 'director' : 'cadet'))}
             onData={openData}
             onGlossary={() => openGlossary(null)}
+            onGuidelines={() => setGuidelinesOpen(true)}
             onFullscreen={fullscreen}
             onVR={enterVR}
             onExit={() => { if (window.confirm(multiplayer ? 'Leave this mission and your crew?' : 'Leave this mission? Progress in this run will be lost.')) onExit(); }}
@@ -434,12 +441,28 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
 
           <aside className={`hud-drawer ${drawer ? 'open' : ''}`}>
             <nav className="drawer-tabs">
-              {([['power', '⚡', 'Power'], ['systems', '🧪', 'Systems'], ['log', '📜', 'Log']] as const).map(([id, icon, label]) => (
+              {([
+                ['power', <Zap size={16} key="p" />, 'Power'],
+                ['systems', <FlaskConical size={16} key="s" />, 'Systems'],
+                ['log', <Activity size={16} key="l" />, 'Log']
+              ] as const).map(([id, icon, label]) => (
                 <button key={id} type="button" className={drawer === id ? 'on' : ''} onClick={() => { soundFx.playClick(); setDrawer(drawer === id ? null : id); }}>
                   <span>{icon}</span>
                   <small>{label}</small>
                 </button>
               ))}
+              <button
+                type="button"
+                className="guidelines-tab-btn"
+                onClick={() => {
+                  soundFx.playClick();
+                  setGuidelinesOpen(true);
+                }}
+                title="Mission Guidelines"
+              >
+                <span><ClipboardList size={16} /></span>
+                <small>Guidelines</small>
+              </button>
             </nav>
             {drawer && (
               <div className="drawer-body">
@@ -496,7 +519,8 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
               <div className="hi"><span>Score</span><b>{outcome.score.toLocaleString()}</b></div>
             </div>
             <p className="hint-bonus">
-              🤖 Hints used {hintsUsed}/{hintBudget}
+              <Bot size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              Hints used {hintsUsed}/{hintBudget}
               {outcome.hintBonus > 0 && <> · <b>+{outcome.hintBonus}</b> independence bonus</>}
             </p>
             {earnedBadges.length > 0 && (
@@ -506,7 +530,7 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
             )}
             {outcome.unlocked && (
               <div className="unlock-banner">
-                <span className="lock-anim">🔓</span>
+                <span className="lock-anim"><Unlock size={22} /></span>
                 <div>
                   <small>NEW MISSION UNLOCKED</small>
                   <b>{outcome.unlocked === SANDBOX_ID ? 'Sandbox Outpost' : MISSION_CAMPAIGNS.find((m) => m.id === outcome.unlocked)?.title}</b>
@@ -514,15 +538,21 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
               </div>
             )}
             <div className="debrief-actions">
-              <button type="button" className="ghost" onClick={onExit}>🗺️ Mission map</button>
+              <button type="button" className="ghost" onClick={onExit}>
+                <Map size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                Mission map
+              </button>
               {authority ? (
-                <button type="button" className="ghost" onClick={retry}>↻ {multiplayer ? 'Retry with crew' : 'Retry'}</button>
+                <button type="button" className="ghost" onClick={retry}>
+                  <RotateCcw size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                  {multiplayer ? 'Retry with crew' : 'Retry'}
+                </button>
               ) : (
                 <span className="waiting-note">Waiting for the commander to retry…</span>
               )}
               {nextMission && !multiplayer && (
                 <button type="button" className="cta" onClick={() => onNext(nextMission.id, nextMission.location as Location)}>
-                  Next: {nextMission.title.replace(/^Mission \d+: /, '')} →
+                  Next: {nextMission.title.replace(/^Mission \d+: /, '')} <ChevronRight size={15} style={{ display: 'inline', verticalAlign: 'middle' }} />
                 </button>
               )}
             </div>
@@ -532,6 +562,7 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
 
       <NASADataModal isOpen={dataOpen} onClose={() => setDataOpen(false)} />
       <GlossaryModal isOpen={glossary.open} initialTerm={glossary.term} onClose={() => setGlossary({ open: false, term: null })} />
+      <MissionGuidelinesModal isOpen={guidelinesOpen} initialMissionId={mission?.id ?? 'mission-1'} onClose={() => setGuidelinesOpen(false)} />
     </div>
   );
 }

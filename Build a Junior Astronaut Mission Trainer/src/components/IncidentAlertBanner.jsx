@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertOctagon, AlertTriangle, Shield, ShieldCheck, Radio, Hourglass } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 
 export function IncidentAlertBanner({
@@ -16,7 +17,7 @@ export function IncidentAlertBanner({
   return (
     <div className={`incident-banner-container ${alert.severity}`}>
       <div className="incident-pulse-icon">
-        {isDONKI ? '☀️🚨' : '⚠️'}
+        {isDONKI ? <AlertOctagon size={26} color="#ff3344" /> : <AlertTriangle size={26} color="#ffb000" />}
       </div>
 
       <div className="incident-content">
@@ -25,7 +26,8 @@ export function IncidentAlertBanner({
           <h4 className="incident-title">{alert.title}</h4>
           {alert.countdownSec > 0 && (
             <span className="incident-countdown">
-              ⏳ IMPACT IN: <strong>{Math.ceil(alert.countdownSec)}s</strong>
+              <Hourglass size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              IMPACT IN: <strong>{Math.ceil(alert.countdownSec)}s</strong>
             </span>
           )}
         </div>
@@ -41,7 +43,8 @@ export function IncidentAlertBanner({
               onResolveAlert('bunker');
             }}
           >
-            🏰 {isSheltered ? 'CREW SAFELY SHELTERED' : 'SEAL CREW IN UNDERGROUND BUNKER'}
+            <Shield size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+            {isSheltered ? 'CREW SAFELY SHELTERED' : 'SEAL CREW IN UNDERGROUND BUNKER'}
           </button>
 
           <button
@@ -52,7 +55,8 @@ export function IncidentAlertBanner({
               onResolveAlert('shield');
             }}
           >
-            🌐 {isDeflectorOn ? 'MAGNETIC DEFLECTOR ACTIVE' : 'ENGAGE MAGNETIC DEFLECTOR (-45 kW)'}
+            <ShieldCheck size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+            {isDeflectorOn ? 'MAGNETIC DEFLECTOR ACTIVE' : 'ENGAGE MAGNETIC DEFLECTOR (-45 kW)'}
           </button>
 
           <button
@@ -61,7 +65,8 @@ export function IncidentAlertBanner({
             onClick={onOpenDONKI}
             title="Inspect real NASA DONKI space weather catalog"
           >
-            📡 View DONKI Data
+            <Radio size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+            View DONKI Data
           </button>
         </div>
       </div>

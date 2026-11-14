@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Sun, Activity, Moon, Award, X } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 import { REAL_DONKI_EVENTS, REAL_OSDR_STUDIES, PLANETARY_LOCATIONS } from '../utils/nasaData';
 
@@ -23,7 +24,7 @@ export function NASADataModal({ isOpen, onClose }) {
               onClose();
             }}
           >
-            ×
+            <X size={18} />
           </button>
         </div>
 
@@ -37,7 +38,8 @@ export function NASADataModal({ isOpen, onClose }) {
               setActiveTab('donki');
             }}
           >
-            ☀️ Space Weather (DONKI)
+            <Sun size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+            Space Weather (DONKI)
           </button>
 
           <button
@@ -48,7 +50,8 @@ export function NASADataModal({ isOpen, onClose }) {
               setActiveTab('osdr');
             }}
           >
-            🧬 Space Biology (OSDR)
+            <Activity size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+            Space Biology (OSDR)
           </button>
 
           <button
@@ -59,7 +62,8 @@ export function NASADataModal({ isOpen, onClose }) {
               setActiveTab('planetary');
             }}
           >
-            🌕 Artemis & Mars Surface Data
+            <Moon size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+            Artemis & Mars Surface Data
           </button>
 
           <button
@@ -70,7 +74,8 @@ export function NASADataModal({ isOpen, onClose }) {
               setActiveTab('challenge');
             }}
           >
-            🏆 Space Apps 2026 Challenge Info
+            <Award size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+            Space Apps 2026 Challenge Info
           </button>
         </div>
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Copy, Check, Crown } from 'lucide-react';
 import { AvatarBadge } from '../components/AvatarBadge';
 import { EMOTES, type Emote, type PeerInfo } from '../net/crewLink';
 import type { AvatarConfig } from '../game/types';
@@ -52,18 +53,30 @@ export function CrewPanel({ code, online, you, youAreHost, hostId, peers, onEmot
       </button>
       {open && (
         <div className="crew-body">
-          <button type="button" className="copy-code" onClick={copy}>{copied ? '✓ Copied' : '⧉ Copy crew code'}</button>
+          <button type="button" className="copy-code" onClick={copy}>
+            {copied ? (
+              <>
+                <Check size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Copy crew code
+              </>
+            )}
+          </button>
           <ul>
             <li>
               <AvatarBadge avatar={you.avatar} size={26} />
               <span>{you.name} <small>(you)</small></span>
-              {youAreHost && <em title="Mission commander: runs the simulation">⭐</em>}
+              {youAreHost && <em title="Mission commander: runs the simulation"><Crown size={14} color="#ffb547" /></em>}
             </li>
             {peers.map((p) => (
               <li key={p.id}>
                 <AvatarBadge avatar={p.avatar} size={26} />
                 <span>{p.name}</span>
-                {p.id === hostId && <em title="Mission commander">⭐</em>}
+                {p.id === hostId && <em title="Mission commander"><Crown size={14} color="#ffb547" /></em>}
               </li>
             ))}
           </ul>

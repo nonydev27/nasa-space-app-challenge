@@ -1,9 +1,11 @@
 import { useState, type CSSProperties } from 'react';
+import { Users, Lock, Moon, Compass, Play, ClipboardList, Star } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 import { BADGE_DEFINITIONS, MISSION_CAMPAIGNS, PLANETARY_LOCATIONS } from '../utils/nasaData';
 import { allBadges, isMissionUnlocked, MISSION_ORDER, SANDBOX_ID } from '../game/profileStore';
 import { findAvatar } from '../game/avatars';
 import { AvatarBadge } from '../components/AvatarBadge';
+import { MissionGuidelinesModal } from '../components/MissionGuidelinesModal';
 import type { PilotProfile } from '../game/types';
 import { CREW_ERRORS, CrewLink } from '../net/crewLink';
 
@@ -33,6 +35,7 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
   const firstOpen = [...MISSION_ORDER].reverse().find((id) => isMissionUnlocked(pilot, id)) ?? MISSION_ORDER[0];
   const [selected, setSelected] = useState<string>(firstOpen);
   const [sandboxLoc, setSandboxLoc] = useState<'moon' | 'mars'>('moon');
+  const [guidelinesOpen, setGuidelinesOpen] = useState(false);
   const avatar = findAvatar(pilot.avatarId, pilot.accentOverride);
   const badges = allBadges(pilot);
   const done = MISSION_ORDER.filter((id) => pilot.completed[id]).length;
@@ -86,7 +89,9 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
             </span>
           ))}
         </div>
-        <button type="button" className="join-crew-btn" onClick={() => { soundFx.playClick(); setJoinOpen(true); }}>👥 Join crew</button>
+        <button type="button" className="join-crew-btn" onClick={() => { soundFx.playClick(); setJoinOpen(true); }}>
+          <Users size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> Join crew
+        </button>
         <button type="button" className="ghost small" onClick={onSignOut}>Switch pilot</button>
       </header>
 
@@ -108,7 +113,7 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
                 aria-label={`${n.title}${open ? '' : ' (locked)'}`}
               >
                 <span className="planet" />
-                <span className="node-status">{complete ? '★' : open ? '' : '🔒'}</span>
+                <span className="node-status">{complete ? <Star size={12} fill="#ffb547" color="#ffb547" /> : open ? '' : <Lock size={12} />}</span>
                 <span className="node-label">
                   <small>{n.id === SANDBOX_ID ? 'BONUS' : `MISSION ${i + 1}`}</small>
                   {n.title.replace(/^Mission \d+: /, '')}
@@ -125,13 +130,20 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
               <h2>Sandbox Outpost</h2>
               <p>No timers, no orders. Test any configuration you like on the Moon or Mars.</p>
               <div className="seg">
-                <button type="button" className={sandboxLoc === 'moon' ? 'on' : ''} onClick={() => setSandboxLoc('moon')}>🌕 Moon</button>
-                <button type="button" className={sandboxLoc === 'mars' ? 'on' : ''} onClick={() => setSandboxLoc('mars')}>🔴 Mars</button>
+                <button type="button" className={sandboxLoc === 'moon' ? 'on' : ''} onClick={() => setSandboxLoc('moon')}>
+                  <Moon size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} /> Moon
+                </button>
+                <button type="button" className={sandboxLoc === 'mars' ? 'on' : ''} onClick={() => setSandboxLoc('mars')}>
+                  <Compass size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} /> Mars
+                </button>
               </div>
             </>
           ) : mission ? (
             <>
-              <span className="eyebrow">{mission.location === 'moon' ? '🌕 LUNAR' : '🔴 MARTIAN'} · {mission.difficulty.toUpperCase()}</span>
+              <span className="eyebrow">
+                {mission.location === 'moon' ? <Moon size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} /> : <Compass size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />}
+                {mission.location === 'moon' ? 'LUNAR' : 'MARTIAN'} · {mission.difficulty.toUpperCase()}
+              </span>
               <h2>{mission.title.replace(/^Mission \d+: /, '')}</h2>
               <p className="tagline">{mission.tagline}</p>
               {unlocked ? <p>{mission.story}</p> : <p className="redacted">Mission file classified. {mission.tagline}.</p>}
@@ -141,6 +153,14 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
                 <div><dt>O₂ / Battery</dt><dd>≥{mission.goal.minO2}% / ≥{mission.goal.minBattery}%</dd></div>
                 {result && <div><dt>Best score</dt><dd>{result.bestScore.toLocaleString()} pts</dd></div>}
               </dl>
+              <button
+                type="button"
+                className="ghost brief-guidelines-btn"
+                onClick={() => setGuidelinesOpen(true)}
+              >
+                <ClipboardList size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                Mission Guidelines
+              </button>
             </>
           ) : null}
 
@@ -155,7 +175,8 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
                 }}
               >
                 <span className="launch-glow" />
-                🚀 {result ? 'FLY AGAIN' : 'LAUNCH'}
+                <Play size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                {result ? 'FLY AGAIN' : 'LAUNCH'}
                 <small>solo mission</small>
               </button>
               <button
@@ -164,15 +185,29 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
                 disabled={busy}
                 onClick={() => hostCrew(selected, selected === SANDBOX_ID ? sandboxLoc : (mission?.location as 'moon' | 'mars'))}
               >
-                {busy ? 'Opening crew channel…' : '👥 Launch with a crew (up to 4)'}
+                {busy ? 'Opening crew channel…' : (
+                  <>
+                    <Users size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                    Launch with a crew (up to 4)
+                  </>
+                )}
               </button>
               {crewError && <p className="form-error">{crewError}</p>}
             </div>
           ) : (
-            <div className="locked-note">🔒 Complete <b>{prevTitle}</b> to unlock.</div>
+            <div className="locked-note">
+              <Lock size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              Complete <b>{prevTitle}</b> to unlock.
+            </div>
           )}
         </aside>
       </div>
+
+      <MissionGuidelinesModal
+        isOpen={guidelinesOpen}
+        initialMissionId={selected}
+        onClose={() => setGuidelinesOpen(false)}
+      />
 
       {joinOpen && (
         <JoinCrewDialog

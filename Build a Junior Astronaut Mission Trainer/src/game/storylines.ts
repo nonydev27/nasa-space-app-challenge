@@ -289,6 +289,17 @@ function introBeats(m: Mission, ctx: StoryContext): StoryBeat[] {
           }
         ]; 
 
+        case 'mission-9':
+          return[
+            {
+              shot: 'establishing',
+              kicker: 'JEZERO CRATER · MARS',
+              text: `Commander ${you}, the Jezero outpost is now a permanent settlement. The crew is healthy, the batteries are charged, and the solar wings are tracking the Sun.`,
+              data: [
+                { label: 'Gravity', value: MARS.gravity, source: 'Mars 2020' },
+              ]
+            }
+          ]
     default:
       return [];
   }

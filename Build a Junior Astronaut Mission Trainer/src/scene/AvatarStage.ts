@@ -37,15 +37,15 @@ export class AvatarStage {
     this.envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
     this.scene.environment = this.envTex;
-    this.scene.environmentIntensity = 0.5;
+    this.scene.environmentIntensity = 0.25;
 
-    const key = new THREE.DirectionalLight('#fff4e0', 3);
+    const key = new THREE.DirectionalLight('#fff4e0', 1.6);
     key.position.set(3, 5, 4);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
-    const rim = new THREE.DirectionalLight('#5fd8ff', 2.5);
+    const rim = new THREE.DirectionalLight('#5fd8ff', 1.0);
     rim.position.set(-4, 3, -4);
-    const fill = new THREE.HemisphereLight('#9ab7ff', '#20160f', 0.6);
+    const fill = new THREE.HemisphereLight('#9ab7ff', '#20160f', 0.35);
     this.scene.add(key, rim, fill);
 
     // Launch-pad platform

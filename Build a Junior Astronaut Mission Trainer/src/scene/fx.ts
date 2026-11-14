@@ -136,7 +136,7 @@ export class JetFlames {
       n.add(outer);
       this.cones.push(outer);
     }
-    this.light = new THREE.PointLight('#9fd6ff', 0, 7, 1.6);
+    this.light = new THREE.PointLight('#9fd6ff', 0, 4.5, 1.8);
     this.light.position.set(0, 0.7, -0.4);
     rig.group.add(this.light);
   }
@@ -148,7 +148,7 @@ export class JetFlames {
       c.visible = this.level > 0.03;
       c.scale.set(1, this.level * flicker * 1.4, 1);
     }
-    this.light.intensity = this.level * 6 * flicker;
+    this.light.intensity = this.level * 1.8 * flicker;
     if (exhaust && this.level > 0.3) {
       this.emitAcc += dt * 70;
       const wp = new THREE.Vector3();

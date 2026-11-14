@@ -97,7 +97,7 @@ export function applyAction(s: SimState, a: SimAction, actor?: string): SimState
   }
   if (actor && a.type !== 'alloc') {
     const hour = `${Math.floor(next.hour).toString().padStart(2, '0')}:${Math.floor((next.hour % 1) * 60).toString().padStart(2, '0')}`;
-    next = { ...next, logs: [{ id: Date.now() + Math.random(), sol: next.sol, hour, text: `👩‍🚀 ${actor} ${DESCRIBE[a.type](next)}.`, type: 'info' }, ...next.logs.slice(0, 30)] };
+    next = { ...next, logs: [{ id: Date.now() + Math.random(), sol: next.sol, hour, text: `[CREW] ${actor} ${DESCRIBE[a.type](next)}.`, type: 'info' }, ...next.logs.slice(0, 30)] };
   }
   return next;
 }

@@ -44,19 +44,19 @@ export function useCrew(link: CrewLink | null, handlers: Handlers): CrewStatus {
         case 'peer-join':
           link.room?.peers.push(m.peer);
           setPeers((ps) => [...ps.filter((p) => p.id !== m.peer.id), m.peer]);
-          h.current.onToast(`🧑‍🚀 ${m.peer.name} joined the crew`);
+          h.current.onToast(`${m.peer.name} joined the crew`);
           break;
         case 'peer-leave': {
           const name = nameOf(m.id);
           if (link.room) link.room.peers = link.room.peers.filter((p) => p.id !== m.id);
           setPeers((ps) => ps.filter((p) => p.id !== m.id));
-          h.current.onToast(`👋 ${name} left the crew`);
+          h.current.onToast(`${name} left the crew`);
           break;
         }
         case 'host':
           if (link.room) link.room.hostId = m.hostId;
           setHostId(m.hostId);
-          h.current.onToast(m.hostId === you ? '⭐ You are now the mission commander' : `⭐ ${nameOf(m.hostId)} is now commander`);
+          h.current.onToast(m.hostId === you ? 'You are now the mission commander' : `${nameOf(m.hostId)} is now commander`);
           break;
         case 'pose':
           h.current.onPose(m.id, m.p);
@@ -73,7 +73,7 @@ export function useCrew(link: CrewLink | null, handlers: Handlers): CrewStatus {
         case 'error':
           if (m.reason === 'closed') {
             setOnline(false);
-            h.current.onToast('📡 Lost the crew link — continuing solo');
+            h.current.onToast('Lost the crew link — continuing solo');
           }
           break;
       }

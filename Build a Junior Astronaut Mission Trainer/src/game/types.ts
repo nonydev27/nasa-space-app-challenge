@@ -18,7 +18,7 @@ export interface AvatarConfig {
 }
 
 export interface MissionResult {
-  bestScore: number;
+  bestScore: number;  
   sols: number;
   badges: string[];
   completedAt: string;

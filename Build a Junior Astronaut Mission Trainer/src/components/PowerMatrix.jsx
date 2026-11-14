@@ -1,4 +1,17 @@
 import React from 'react';
+import {
+  Zap,
+  Sun,
+  Shield,
+  ShieldCheck,
+  Sprout,
+  FlaskConical,
+  Radio,
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
+  Wind
+} from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 
 export function PowerMatrix({
@@ -41,7 +54,7 @@ export function PowerMatrix({
     <div className="power-matrix-deck">
       <div className="deck-header">
         <div className="deck-title-area">
-          <span className="deck-icon">⚡</span>
+          <span className="deck-icon"><Zap size={22} color="#38d9ff" /></span>
           <div>
             <h3>POWER ROUTING MATRIX</h3>
             <p className="deck-subtitle">
@@ -68,7 +81,13 @@ export function PowerMatrix({
       {/* GENERATION SUMMARY BAR */}
       <div className="power-budget-bar-section">
         <div className="budget-bar-labels">
-          <span>Total Generation: <strong>{totalGen} kW</strong> (☀️ Solar {Math.round(state.solarOutputKW)} kW + ⚛️ RTG {Math.round(state.rtgNuclearOutputKW)} kW)</span>
+          <span>
+            Total Generation: <strong>{totalGen} kW</strong> (
+            <Sun size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+            Solar {Math.round(state.solarOutputKW)} kW + 
+            <Zap size={13} style={{ display: 'inline', verticalAlign: 'middle', margin: '0 4px' }} />
+            RTG {Math.round(state.rtgNuclearOutputKW)} kW)
+          </span>
           <span>Allocated Load: <strong>{totalCons} kW</strong></span>
         </div>
         <div className="generation-vs-load-track">
@@ -84,7 +103,7 @@ export function PowerMatrix({
         {/* 1. ECLSS LIFE SUPPORT */}
         <div className="allocation-card">
           <div className="alloc-header">
-            <span className="alloc-icon">🫁</span>
+            <span className="alloc-icon"><Wind size={18} color="#38d9ff" /></span>
             <div className="alloc-text">
               <span className="alloc-title">
                 ECLSS Life Support & Heaters
@@ -96,7 +115,7 @@ export function PowerMatrix({
                   ?
                 </button>
               </span>
-              <span className="alloc-desc">Air scrubbers, thermal heaters, water loop</span>
+              <span className="alloc-desc">O2 generation, CO2 scrubbers, habitat thermal loop</span>
             </div>
             <span className="alloc-kw">{state.powerAllocations.eclss} kW</span>
           </div>
@@ -129,9 +148,15 @@ export function PowerMatrix({
           </div>
           <div className="trade-off-consequence">
             {state.powerAllocations.eclss < 25 ? (
-              <span className="warning-text">⚠️ Below 25 kW: O2 levels will decline and CO2 will accumulate!</span>
+              <span className="warning-text">
+                <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Below 25 kW: O2 levels will decline and CO2 will accumulate!
+              </span>
             ) : (
-              <span className="safe-text">✅ Nominal oxygen generation and cabin temperature</span>
+              <span className="safe-text">
+                <CheckCircle2 size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Nominal oxygen generation and cabin temperature
+              </span>
             )}
           </div>
         </div>
@@ -139,7 +164,7 @@ export function PowerMatrix({
         {/* 2. RADIATION SHIELDS & DEFLECTOR */}
         <div className="allocation-card">
           <div className="alloc-header">
-            <span className="alloc-icon">🛡️</span>
+            <span className="alloc-icon"><Shield size={18} color="#ffb547" /></span>
             <div className="alloc-text">
               <span className="alloc-title">
                 Radiation Shields & Deflector
@@ -184,7 +209,10 @@ export function PowerMatrix({
           </div>
           <div className="trade-off-consequence">
             {state.powerAllocations.shields >= 35 ? (
-              <span className="safe-text">🛡️ Magnetic forcefield active — protects from solar protons</span>
+              <span className="safe-text">
+                <ShieldCheck size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Magnetic forcefield active — protects from solar protons
+              </span>
             ) : (
               <span className="neutral-text">Passive regolith shielding only</span>
             )}
@@ -194,7 +222,7 @@ export function PowerMatrix({
         {/* 3. HYDROPONIC GREENHOUSE */}
         <div className="allocation-card">
           <div className="alloc-header">
-            <span className="alloc-icon">🌱</span>
+            <span className="alloc-icon"><Sprout size={18} color="#3ddc97" /></span>
             <div className="alloc-text">
               <span className="alloc-title">
                 Hydroponic Greenhouse
@@ -239,9 +267,15 @@ export function PowerMatrix({
           </div>
           <div className="trade-off-consequence">
             {state.powerAllocations.greenhouse < 15 ? (
-              <span className="warning-text">⚠️ Low light: Crop growth stalls; plants may wither</span>
+              <span className="warning-text">
+                <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Low light: Crop growth stalls; plants may wither
+              </span>
             ) : (
-              <span className="safe-text">🌿 Healthy photosynthesis (+Food & fresh O2)</span>
+              <span className="safe-text">
+                <Sprout size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Healthy photosynthesis (+Food & fresh O2)
+              </span>
             )}
           </div>
         </div>
@@ -249,7 +283,7 @@ export function PowerMatrix({
         {/* 4. SCIENCE LAB & SAMPLE DRILLS */}
         <div className="allocation-card">
           <div className="alloc-header">
-            <span className="alloc-icon">🔬</span>
+            <span className="alloc-icon"><FlaskConical size={18} color="#b892ff" /></span>
             <div className="alloc-text">
               <span className="alloc-title">Science Lab & Drills</span>
               <span className="alloc-desc">Sample spectroscopy, ice coring, mission research</span>
@@ -285,7 +319,10 @@ export function PowerMatrix({
           </div>
           <div className="trade-off-consequence">
             {state.powerAllocations.scienceLab > 0 ? (
-              <span className="safe-text">✨ Discoveries generating +{((state.powerAllocations.scienceLab / 10) * 0.5).toFixed(1)} pts/hr</span>
+              <span className="safe-text">
+                <Sparkles size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Discoveries generating +{((state.powerAllocations.scienceLab / 10) * 0.5).toFixed(1)} pts/hr
+              </span>
             ) : (
               <span className="neutral-text">Science on hold to conserve battery</span>
             )}
@@ -295,7 +332,7 @@ export function PowerMatrix({
         {/* 5. COMMS & ROVER DOCK */}
         <div className="allocation-card">
           <div className="alloc-header">
-            <span className="alloc-icon">📡</span>
+            <span className="alloc-icon"><Radio size={18} color="#38d9ff" /></span>
             <div className="alloc-text">
               <span className="alloc-title">Comms & Rover Recharge</span>
               <span className="alloc-desc">Deep Space Network uplink & rover battery charging</span>
@@ -331,9 +368,15 @@ export function PowerMatrix({
           </div>
           <div className="trade-off-consequence">
             {state.powerAllocations.commsRover >= 10 ? (
-              <span className="safe-text">📡 DSN downlink connected to NASA Houston</span>
+              <span className="safe-text">
+                <Radio size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                DSN downlink connected to NASA Houston
+              </span>
             ) : (
-              <span className="warning-text">⚠️ Telemetry packets delayed</span>
+              <span className="warning-text">
+                <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                Telemetry packets delayed
+              </span>
             )}
           </div>
         </div>
@@ -350,7 +393,7 @@ export function PowerMatrix({
           }}
           title="Evacuate crew 2.5m under regolith during solar storms"
         >
-          <span className="action-icon">🏰</span>
+          <span className="action-icon"><Shield size={16} /></span>
           <span>
             {state.toggles.bunkerLockdown ? 'SEALED IN BUNKER (90% Shielding)' : 'EVACUATE TO REGOLITH BUNKER'}
           </span>
@@ -365,7 +408,7 @@ export function PowerMatrix({
           }}
           title="Deploy electromagnetic deflector field"
         >
-          <span className="action-icon">🌐</span>
+          <span className="action-icon"><ShieldCheck size={16} /></span>
           <span>
             {state.toggles.magneticShieldActive ? 'DEFLECTOR FORCEFIELD ONLINE' : 'ACTIVATE MAGNETIC DEFLECTOR'}
           </span>
