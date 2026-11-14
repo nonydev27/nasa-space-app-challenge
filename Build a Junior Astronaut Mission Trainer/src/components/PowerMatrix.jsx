@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Zap,
   Sun,
@@ -13,6 +12,7 @@ import {
   Wind
 } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
+import { eclssNeedKW, POWER, totalLoadKW } from '../utils/simulationEngine';
 
 export function PowerMatrix({
   state,
@@ -22,9 +22,8 @@ export function PowerMatrix({
   onGlossaryClick
 }) {
   const totalGen = Math.round(state.solarOutputKW + state.rtgNuclearOutputKW);
-  const totalCons = Math.round(
-    Object.values(state.powerAllocations).reduce((a, b) => a + b, 0)
-  );
+  const totalCons = Math.round(totalLoadKW(state));
+  const eclssNeed = eclssNeedKW(state);
   const netPower = totalGen - totalCons;
   const batteryPct = Math.round((state.batteryKWh / state.batteryMaxKWh) * 100);
 
@@ -147,15 +146,15 @@ export function PowerMatrix({
             </button>
           </div>
           <div className="trade-off-consequence">
-            {state.powerAllocations.eclss < 25 ? (
+            {state.powerAllocations.eclss < eclssNeed ? (
               <span className="warning-text">
                 <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                Below 25 kW: O2 levels will decline and CO2 will accumulate!
+                Needs {eclssNeed} kW right now{state.isDaylight ? '' : ' (night heaters)'}: the air is getting worse!
               </span>
             ) : (
               <span className="safe-text">
                 <CheckCircle2 size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                Nominal oxygen generation and cabin temperature
+                Enough power ({eclssNeed} kW needed): air and heat are OK
               </span>
             )}
           </div>
@@ -208,13 +207,13 @@ export function PowerMatrix({
             </button>
           </div>
           <div className="trade-off-consequence">
-            {state.powerAllocations.shields >= 35 ? (
+            {state.toggles.magneticShieldActive && state.powerAllocations.shields >= POWER.deflectorKW ? (
               <span className="safe-text">
                 <ShieldCheck size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
                 Magnetic forcefield active — protects from solar protons
               </span>
             ) : (
-              <span className="neutral-text">Passive regolith shielding only</span>
+              <span className="neutral-text">{state.toggles.magneticShieldActive ? `Deflector needs ${POWER.deflectorKW} kW to work` : 'Deflector off: radiation sensors only'}</span>
             )}
           </div>
         </div>

@@ -12,8 +12,12 @@ interface Handlers {
   onToast: (text: string) => void;
 }
 
+export type LinkStatus = 'online' | 'reconnecting' | 'offline';
+
 export interface CrewStatus {
   online: boolean;
+  /** 'reconnecting' while rejoining after a drop; 'offline' = continuing solo */
+  status: LinkStatus;
   code: string | null;
   you: string | null;
   peers: PeerInfo[];
@@ -28,7 +32,9 @@ const closeTimers = new WeakMap<CrewLink, number>();
 export function useCrew(link: CrewLink | null, handlers: Handlers): CrewStatus {
   const [peers, setPeers] = useState<PeerInfo[]>(() => link?.room?.peers ?? []);
   const [hostId, setHostId] = useState<string | null>(() => link?.room?.hostId ?? null);
-  const [online, setOnline] = useState(() => Boolean(link && !link.closed));
+  const [status, setStatus] = useState<LinkStatus>(() => (link && !link.closed ? 'online' : 'offline'));
+  const [you, setYou] = useState<string | null>(() => link?.room?.you ?? null);
+  const online = status === 'online';
   const h = useRef(handlers);
   useEffect(() => {
     h.current = handlers;
@@ -37,7 +43,6 @@ export function useCrew(link: CrewLink | null, handlers: Handlers): CrewStatus {
   useEffect(() => {
     if (!link) return;
     window.clearTimeout(closeTimers.get(link));
-    const you = link.room?.you;
     const nameOf = (id: string) => link.room?.peers.find((p) => p.id === id)?.name ?? 'A crewmate';
     const off = link.on((m) => {
       switch (m.t) {
@@ -56,24 +61,35 @@ export function useCrew(link: CrewLink | null, handlers: Handlers): CrewStatus {
         case 'host':
           if (link.room) link.room.hostId = m.hostId;
           setHostId(m.hostId);
-          h.current.onToast(m.hostId === you ? 'You are now the mission commander' : `${nameOf(m.hostId)} is now commander`);
+          h.current.onToast(m.hostId === link.room?.you ? 'You are now the mission commander. The mission continues from your screen.' : `${nameOf(m.hostId)} is now commander`);
           break;
         case 'pose':
           h.current.onPose(m.id, m.p);
           break;
         case 'action':
-          if (link.room?.hostId === you && isValidAction(m.action)) h.current.onAction(m.action, m.name);
+          if (link.room?.hostId === link.room?.you && isValidAction(m.action)) h.current.onAction(m.action, m.name);
           break;
         case 'state':
-          if (link.room?.hostId !== you && m.state && typeof m.state === 'object') h.current.onState(m.state, m.phase);
+          if (link.room?.hostId !== link.room?.you && m.state && typeof m.state === 'object') h.current.onState(m.state, m.phase);
           break;
         case 'emote':
           h.current.onEmote(m.id, m.e);
           break;
+        case 'reconnecting':
+          setStatus('reconnecting');
+          if (m.attempt === 1) h.current.onToast('Crew link lost. Reconnecting…');
+          break;
+        case 'rejoined':
+          setStatus('online');
+          setYou(m.room.you);
+          setPeers(m.room.peers);
+          setHostId(m.room.hostId);
+          h.current.onToast('Reconnected to your crew');
+          break;
         case 'error':
           if (m.reason === 'closed') {
-            setOnline(false);
-            h.current.onToast('Lost the crew link — continuing solo');
+            setStatus('offline');
+            h.current.onToast('Could not reach the crew. You are flying solo now; the mission continues on your screen.');
           }
           break;
       }
@@ -84,9 +100,9 @@ export function useCrew(link: CrewLink | null, handlers: Handlers): CrewStatus {
     };
   }, [link]);
 
-  const you = link?.room?.you ?? null;
   return {
     online: Boolean(link) && online,
+    status: link ? status : 'offline',
     code: link?.room?.code ?? null,
     you,
     peers,

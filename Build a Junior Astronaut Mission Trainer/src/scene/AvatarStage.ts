@@ -6,6 +6,9 @@ import type { AvatarConfig } from '../game/types';
 import { buildAstronaut, type AstronautRig } from './astronaut';
 import { rng } from './noise';
 
+/** Launch speed for the gravity lab, m/s (a strong two-footed hop in a suit). */
+export const JUMP_SPEED = 2.6;
+
 export class AvatarStage {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -17,6 +20,15 @@ export class AvatarStage {
   private ro: ResizeObserver;
   private walkT = 0;
   private envTex: THREE.Texture;
+  // interaction
+  private spinVel = 0;
+  private dragX: number | null = null;
+  private jumpY = 0;
+  private jumpV = 0;
+  private gravity = 0;
+  private peak = 0;
+  private onLand?: (peak: number) => void;
+  private marker: THREE.Mesh;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -77,8 +89,58 @@ export class AvatarStage {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(cw, ch);
     });
+    // peak-height marker for the gravity lab
+    this.marker = new THREE.Mesh(
+      new THREE.TorusGeometry(0.55, 0.015, 6, 48),
+      new THREE.MeshBasicMaterial({ color: '#ffb547', transparent: true, opacity: 0 })
+    );
+    this.marker.rotation.x = Math.PI / 2;
+    this.scene.add(this.marker);
+
     this.ro.observe(container);
+    const el = this.renderer.domElement;
+    el.style.touchAction = 'none';
+    el.addEventListener('pointerdown', this.onDown);
+    window.addEventListener('pointermove', this.onMove);
+    window.addEventListener('pointerup', this.onUp);
     this.renderer.setAnimationLoop(this.frame);
+  }
+
+  private downAt = 0;
+  private onDown = (e: PointerEvent) => {
+    this.dragX = e.clientX;
+    this.downAt = performance.now();
+  };
+  private onMove = (e: PointerEvent) => {
+    if (this.dragX === null) return;
+    const dx = e.clientX - this.dragX;
+    this.dragX = e.clientX;
+    this.turntable.rotation.y += dx * 0.012;
+    this.spinVel = dx * 0.6;
+  };
+  private onUp = () => {
+    if (this.dragX !== null && performance.now() - this.downAt < 220 && Math.abs(this.spinVel) < 2) this.wave();
+    this.dragX = null;
+  };
+
+  /** Little celebration: a quick spin and a few steps. */
+  wave(): void {
+    this.spinVel = 9;
+    this.walkT = 1.2;
+  }
+
+  /**
+   * Jump with the same push on different worlds (gravity in m/s²).
+   * Peak height = v² / 2g, so the Moon's weak gravity sends you about 6× higher than Earth.
+   */
+  jump(gravity: number, onLand?: (peak: number) => void): void {
+    if (this.jumpY > 0.001) return;
+    this.gravity = gravity;
+    this.jumpV = JUMP_SPEED;
+    this.peak = 0;
+    this.onLand = onLand;
+    this.marker.position.y = (JUMP_SPEED * JUMP_SPEED) / (2 * gravity) + 1.85;
+    (this.marker.material as THREE.MeshBasicMaterial).opacity = 0.9;
   }
 
   setAvatar(av: AvatarConfig): void {
@@ -94,14 +156,38 @@ export class AvatarStage {
   private frame = () => {
     this.timer.update();
     const dt = Math.min(0.05, this.timer.getDelta());
-    this.turntable.rotation.y += dt * 0.5;
+    if (this.dragX === null) {
+      this.spinVel *= Math.pow(0.04, dt);
+      this.turntable.rotation.y += dt * (0.5 + this.spinVel);
+    }
     this.walkT = Math.max(0, this.walkT - dt);
-    this.rig?.update(dt, this.walkT > 0, true);
+    if (this.jumpV !== 0 || this.jumpY > 0) {
+      this.jumpV -= this.gravity * dt;
+      this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
+      this.peak = Math.max(this.peak, this.jumpY);
+      if (this.jumpY === 0 && this.jumpV < 0) {
+        this.jumpV = 0;
+        this.onLand?.(this.peak);
+        this.onLand = undefined;
+      }
+    }
+    this.turntable.position.y = this.jumpY;
+    // camera rises and pulls back so even a Moon jump stays in frame
+    const lift = Math.min(this.jumpY, 2.4);
+    this.camera.position.y += (1.5 + lift * 0.75 - this.camera.position.y) * Math.min(1, dt * 6);
+    this.camera.position.z += (6.6 + lift * 1.6 - this.camera.position.z) * Math.min(1, dt * 6);
+    this.camera.lookAt(0, 0.95 + lift * 0.8, 0);
+    const mm = this.marker.material as THREE.MeshBasicMaterial;
+    if (this.jumpY === 0) mm.opacity = Math.max(0, mm.opacity - dt * 0.5);
+    this.rig?.update(dt, this.walkT > 0, true, this.jumpY > 0.02);
     this.renderer.render(this.scene, this.camera);
   };
 
   dispose(): void {
     this.renderer.setAnimationLoop(null);
+    this.renderer.domElement.removeEventListener('pointerdown', this.onDown);
+    window.removeEventListener('pointermove', this.onMove);
+    window.removeEventListener('pointerup', this.onUp);
     this.ro.disconnect();
     this.rig?.dispose();
     this.scene.traverse((o) => {
@@ -112,6 +198,7 @@ export class AvatarStage {
     });
     this.envTex.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss(); // free the GPU context now (browsers cap live WebGL contexts)
     this.renderer.domElement.remove();
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Sun,
   Wind,
@@ -14,7 +14,6 @@ import {
   Wheat
 } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
-import { REAL_DONKI_EVENTS, REAL_OSDR_STUDIES } from '../utils/nasaData';
 
 export function SubsystemDecks({
   state,
@@ -27,32 +26,24 @@ export function SubsystemDecks({
   onGlossaryClick,
   onOpenNASAData
 }) {
-  const [selectedCrop, setSelectedCrop] = useState('microgreens');
+  const [selectedCrop, setSelectedCrop] = useState('lettuce');
 
   const CROPS = {
-    microgreens: {
-      name: "Radish & Mustard Microgreens",
+    lettuce: {
+      name: "Red romaine lettuce (Veggie)",
       icon: <Sprout size={20} color="#3ddc97" />,
-      growthSpeed: "Fast (4 Sols)",
-      waterUsage: "Low",
-      nutrition: "Rich in Vitamin C & Antioxidants (Mitigates SANS eye damage)",
-      osdrRef: "OSD-379: High germination rate in regolith simulant"
+      growthSpeed: "Normal cycle: 10 kW",
+      waterUsage: "Steady",
+      nutrition: "Fresh vitamins and a morale boost from eating something green.",
+      osdrRef: "OSD-268: lettuce grown in the ISS Veggie garden was tested on Earth and found safe to eat."
     },
-    potatoes: {
-      name: "Martian Russet Potatoes",
+    cress: {
+      name: "Thale cress in lunar soil",
       icon: <Wheat size={20} color="#ffb547" />,
-      growthSpeed: "Slow (8 Sols)",
-      waterUsage: "High",
-      nutrition: "High Caloric Energy (Protects bone/muscle mass)",
-      osdrRef: "OSD-204: Caloric density crucial for resistive workout recovery"
-    },
-    spirulina: {
-      name: "Spirulina Cyanobacteria Algae",
-      icon: <FlaskConical size={20} color="#38d9ff" />,
-      growthSpeed: "Ultra-Fast (2 Sols)",
-      waterUsage: "Recycled Closed Loop",
-      nutrition: "70% Protein by dry weight & generates pure O2",
-      osdrRef: "ECLSS Bio-regenerative oxygen loop test"
+      growthSpeed: "Slow and stressed",
+      waterUsage: "Steady",
+      nutrition: "An experiment, not a meal yet.",
+      osdrRef: "OSD-476: seeds grew in real Apollo Moon soil, but slowly and with signs of stress."
     }
   };
 
@@ -173,28 +164,28 @@ export function SubsystemDecks({
             <div className={`donki-event-card ${state.activeAlert?.source === 'DONKI' ? 'alerting' : 'calm'}`}>
               <div className="event-badge-row">
                 <span className="event-type-tag">
-                  {state.activeAlert?.source === 'DONKI' ? (
+                  {state.activeAlert ? (
                     <>
                       <AlertOctagon size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-                      LIVE SOLAR EVENT
+                      STORM DRILL · {state.activeAlert.basedOn.live ? 'LIVE DONKI EVENT' : 'ARCHIVED DONKI EVENT'}
                     </>
                   ) : (
-                    'ARCHIVED DONKI EVENT LOG'
+                    'NO STORM RIGHT NOW'
                   )}
                 </span>
-                <span className="event-id">AR3664 / X9.3 Flare</span>
+                <span className="event-id">{state.activeAlert ? state.activeAlert.basedOn.date : 'Watching the Sun'}</span>
               </div>
-              <h5>Coronal Mass Ejection (CME) Velocity: 2,150 km/s</h5>
+              <h5>{state.activeAlert ? `Modelled on a real event: ${state.activeAlert.basedOn.label}` : `Storm risk this month: ${state.weatherRisk} (${state.weatherLive ? 'live NASA data' : 'archive'})`}</h5>
               <p className="event-desc">
-                When a giant solar flare bursts, X-rays arrive at the speed of light (8 minutes to Earth/Moon, 12 minutes to Mars). High-energy protons follow within 30 to 90 minutes. 
-                Astronauts caught outside without shielding face acute radiation sickness!
+                When the Sun flares, its light reaches the Moon in about 8 minutes and Mars in about 13. The fastest particles follow soon after. Astronauts
+                caught outside without shielding get a big radiation dose, so crews shelter as soon as forecasters warn them.
               </p>
 
               <div className="donki-facts-accordion">
                 <strong>Real NASA Data Connection:</strong>
                 <ul>
                   <li>NASA DONKI monitors Coronal Mass Ejections and Solar Energetic Particle (SEP) events worldwide.</li>
-                  <li>Instruments on Parker Solar Probe, SOHO, and STEREO satellites calculate arrival time down to the minute.</li>
+                  <li>Spacecraft such as SOHO and SDO watch the Sun all day so forecasters can warn crews early.</li>
                 </ul>
               </div>
             </div>
@@ -402,14 +393,14 @@ export function SubsystemDecks({
 
             <div className="latency-demonstrator">
               <div className="latency-box">
-                <span className="lat-title">ROUND-TRIP SIGNAL DELAY (SPEED OF LIGHT)</span>
+                <span className="lat-title">ONE-WAY SIGNAL DELAY (SPEED OF LIGHT)</span>
                 <span className="lat-val">
-                  {state.location === 'moon' ? '1.3 Seconds (Moon to Earth)' : '14 Minutes, 20 Seconds (Mars to Earth)'}
+                  {state.location === 'moon' ? 'About 1.3 seconds (Moon to Earth)' : 'About 3 to 22 minutes (Mars to Earth)'}
                 </span>
                 <p className="lat-explanation">
                   {state.location === 'moon'
                     ? 'Because the Moon is only 384,000 km away, astronauts can talk to Earth Houston with almost no delay.'
-                    : 'Mars is up to 400 million km away! If an emergency happens on Mars, you CANNOT wait for Earth to help — you must make local decisions!'}
+                    : 'Mars can be up to about 400 million km away. In an emergency the crew cannot wait for Earth, so they must decide for themselves.'}
                 </p>
               </div>
             </div>
@@ -443,8 +434,8 @@ export function SubsystemDecks({
                     )}
                   </strong>
                 </span>
-                <span>Power Draw: {state.toggles.roverOnEVA ? '12 kW' : '0 kW'}</span>
-                <span>Research Rate: {state.toggles.roverOnEVA ? '+1.8 Science/hr' : '+0.5 Science/hr'}</span>
+                <span>Power Draw: {state.toggles.roverOnEVA ? '10 kW' : '0 kW'}</span>
+                <span>Rover science: {state.toggles.roverOnEVA ? '+1.2 per hour, plus extra radiation' : 'none (docked)'}</span>
               </div>
 
               <div className="rover-action-row">

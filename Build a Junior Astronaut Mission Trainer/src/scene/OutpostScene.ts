@@ -23,8 +23,20 @@ import { soundFx } from '../utils/soundEffects';
 
 export type ModuleId = 'eclss' | 'greenhouse' | 'power' | 'comms' | 'rover' | 'bunker';
 
+/**
+ * Per-mission look. Each mission gets its own set dressing and lighting so the
+ * five missions feel like different places, not one base re-used.
+ *  lunar-dawn   golden low Sun, the Artemis lander parked nearby, a flag
+ *  mars-dust    thicker haze and spinning dust devils on the horizon
+ *  solar-storm  red warning beacons ring the base, sandbag berms on the bunker, a swollen Sun
+ *  greenhouse   two extra grow domes and a row of water tanks
+ *  conjunction  a glaring Sun, red "no signal" comms pulses, spare-part crates by the habitat
+ */
+export type SceneTheme = 'lunar-dawn' | 'mars-dust' | 'solar-storm' | 'greenhouse' | 'conjunction' | 'sandbox';
+
 export interface OutpostSceneOptions {
   location: Location;
+  theme?: SceneTheme;
   avatar: AvatarConfig;
   callsign: string;
   onModuleClick?: (module: ModuleId) => void;
@@ -332,6 +344,14 @@ export class OutpostScene {
   private shield = 0;
   private inXR = false;
 
+  // mission theme
+  private themeSunTint: THREE.Color | null = null;
+  private themeFog = 0;
+  private themeSunScale = 1;
+  private themeBeaconMat: THREE.MeshStandardMaterial | null = null;
+  private dustDevils: THREE.Mesh[] = [];
+  private noSignal = false;
+
   constructor(container: HTMLElement, opts: OutpostSceneOptions) {
     this.container = container;
     this.opts = opts;
@@ -385,6 +405,7 @@ export class OutpostScene {
     this.buildBase();
     this.buildCharacters();
     this.buildEffects();
+    this.buildTheme(opts.theme ?? 'sandbox');
 
     const s = SHOTS.establishing;
     this.camera.position.set(...s.pos);
@@ -581,6 +602,7 @@ export class OutpostScene {
     this.npcs.forEach((n) => n.rig.dispose());
     this.composer.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss(); // free the GPU context now (browsers cap live WebGL contexts)
     this.renderer.domElement.remove();
     this.labelRenderer.domElement.remove();
   }
@@ -1066,6 +1088,141 @@ export class OutpostScene {
     }
   }
 
+  // ============================================================ mission themes
+  private buildTheme(theme: SceneTheme): void {
+    const put = (obj: THREE.Object3D, x: number, z: number, lift = 0) => {
+      obj.position.set(x, this.heightAt(x, z) + lift, z);
+      obj.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) {
+          m.castShadow = true;
+          m.receiveShadow = true;
+        }
+      });
+      this.scene.add(obj);
+      return obj;
+    };
+    const mat = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2, ...extra });
+
+    switch (theme) {
+      case 'lunar-dawn': {
+        this.themeSunTint = new THREE.Color('#ffcf94');
+        // Artemis-style lander: tall white body, gold thermal skirt, four legs
+        const lander = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 9, 24), mat('#f1f1ee'));
+        body.position.y = 6;
+        const skirt = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.8, 1.4, 24), mat('#d4a640', { metalness: 1, roughness: 0.3 }));
+        skirt.position.y = 1.9;
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(2.2, 2.4, 24), mat('#e8e8e4'));
+        nose.position.y = 11.7;
+        lander.add(body, skirt, nose);
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3.6, 8), mat('#9aa3ad', { metalness: 0.8 }));
+          leg.position.set(Math.cos(a) * 2.9, 1.2, Math.sin(a) * 2.9);
+          leg.rotation.z = Math.cos(a) * 0.45;
+          leg.rotation.x = -Math.sin(a) * 0.45;
+          const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.15, 12), mat('#9aa3ad'));
+          foot.position.set(Math.cos(a) * 3.6, 0.07, Math.sin(a) * 3.6);
+          lander.add(leg, foot);
+        }
+        put(lander, 30, 20);
+        const flag = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 4, 8), mat('#d8d8d8', { metalness: 0.9 }));
+        pole.position.y = 2;
+        const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.1), mat('#2a5bd7', { side: THREE.DoubleSide, roughness: 0.9 }));
+        cloth.position.set(0.9, 3.4, 0);
+        flag.add(pole, cloth);
+        put(flag, 8, 6);
+        break;
+      }
+      case 'mars-dust': {
+        this.themeFog = 0.004;
+        const devilMat = new THREE.MeshBasicMaterial({ color: '#c88a5c', transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+        [[-70, -40], [80, -60], [55, 70]].forEach(([x, z]) => {
+          const devil = new THREE.Mesh(new THREE.CylinderGeometry(5, 0.8, 34, 20, 1, true), devilMat.clone());
+          put(devil, x, z, 17);
+          devil.castShadow = false;
+          this.dustDevils.push(devil);
+        });
+        devilMat.dispose();
+        break;
+      }
+      case 'solar-storm': {
+        this.themeSunTint = new THREE.Color('#ffe0b0');
+        this.themeSunScale = 1.35;
+        this.themeBeaconMat = new THREE.MeshStandardMaterial({ color: '#400', emissive: '#ff3030', emissiveIntensity: 2 });
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2;
+          const g = new THREE.Group();
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 8), mat('#2a2f37'));
+          pole.position.y = 1.3;
+          const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), this.themeBeaconMat);
+          lamp.position.y = 2.75;
+          g.add(pole, lamp);
+          put(g, Math.cos(a) * 34, Math.sin(a) * 34 - 4);
+        }
+        // regolith sandbag berm wrapped around the storm bunker
+        const bagMat = mat(this.isMoon ? '#8f8c86' : '#9a5232', { roughness: 1, metalness: 0 });
+        for (let i = 0; i < 14; i++) {
+          const a = Math.PI * 0.15 + (i / 13) * Math.PI * 0.7;
+          const bag = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.2, 4, 8), bagMat);
+          bag.rotation.z = Math.PI / 2;
+          bag.rotation.y = -a;
+          put(bag, BUNKER.x + Math.cos(a) * 7.5, BUNKER.z - Math.sin(a) * 7.5, 0.5);
+        }
+        break;
+      }
+      case 'greenhouse': {
+        const glass = new THREE.MeshPhysicalMaterial({ color: '#d9f5ff', transparent: true, opacity: 0.28, roughness: 0.1, metalness: 0, side: THREE.DoubleSide, depthWrite: false });
+        const glow = new THREE.MeshStandardMaterial({ color: '#2b0b33', emissive: '#d070ff', emissiveIntensity: 1.6 });
+        const leaf = mat('#3fbf6a', { roughness: 0.8, metalness: 0 });
+        [[-27, 10], [-21, 17]].forEach(([x, z]) => {
+          const g = new THREE.Group();
+          const dome = new THREE.Mesh(new THREE.SphereGeometry(3.6, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass);
+          dome.castShadow = false;
+          const ring = new THREE.Mesh(new THREE.CylinderGeometry(3.7, 3.7, 0.4, 32), mat('#cfd3d8'));
+          ring.position.y = 0.2;
+          g.add(ring, dome);
+          for (let r = -1; r <= 1; r++) {
+            const bed = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.4, 0.7), mat('#5a4636'));
+            bed.position.set(0, 0.5, r * 1.2);
+            const strip = new THREE.Mesh(new THREE.BoxGeometry(4, 0.06, 0.12), glow);
+            strip.position.set(0, 2.2, r * 1.2);
+            g.add(bed, strip);
+            for (let k = -3; k <= 3; k++) {
+              const plant = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), leaf);
+              plant.position.set(k * 0.55, 0.85, r * 1.2);
+              g.add(plant);
+            }
+          }
+          put(g, x, z);
+        });
+        const tankMat = mat('#bcd7ea', { metalness: 0.7, roughness: 0.3 });
+        for (let i = 0; i < 4; i++) {
+          const tank = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 3.2, 20), tankMat);
+          put(tank, -31 + i * 2.4, -2, 1.6);
+        }
+        break;
+      }
+      case 'conjunction': {
+        this.themeSunScale = 1.5;
+        this.themeSunTint = new THREE.Color('#e8f0ff');
+        this.noSignal = true;
+        if (this.skyMat) this.skyMat.uniforms.uBlue.value.set('#5e8fe8');
+        const crateMat = mat('#e8742c', { roughness: 0.7 });
+        [[7.5, 4], [8.6, 5.2], [8, 4.6]].forEach(([x, z], i) => {
+          const crate = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 1.1), crateMat);
+          crate.rotation.y = i * 0.6;
+          put(crate, x, z, 0.45 + (i === 2 ? 0.9 : 0));
+        });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
   // ============================================================ input
   private resizeObserver = new ResizeObserver(() => this.resize());
 
@@ -1259,9 +1416,11 @@ export class OutpostScene {
     this.sunSprite.position.copy(this.sunDir).multiplyScalar(800);
     this.sunSprite.visible = this.sunDir.y > -0.08;
     const sunMat = this.sunSprite.material;
-    sunMat.color.set(flareK > 0.05 ? '#ffd2a0' : '#ffffff').lerp(new THREE.Color('#ff7a3a'), flareK * pulse * 0.6);
+    sunMat.color.set(flareK > 0.05 ? '#ffd2a0' : '#ffffff');
+    if (this.themeSunTint) sunMat.color.lerp(this.themeSunTint, 0.6);
+    sunMat.color.lerp(new THREE.Color('#ff7a3a'), flareK * pulse * 0.6);
     sunMat.opacity = 1 - dustK * 0.65;
-    this.sunSprite.scale.setScalar((this.isMoon ? 95 : 58) * (1 + flareK * (0.6 + pulse * 0.5)));
+    this.sunSprite.scale.setScalar((this.isMoon ? 95 : 58) * this.themeSunScale * (1 + flareK * (0.6 + pulse * 0.5)));
 
     if (this.earth) {
       this.earth.position.copy(this.earthDir).multiplyScalar(700);
@@ -1277,7 +1436,9 @@ export class OutpostScene {
     // lights
     const sunI = (this.isMoon ? 2.0 : 1.5) * sunUp * (1 - dustK * 0.72);
     this.sunLight.intensity = sunI + flareK * pulse * 0.8;
-    this.sunLight.color.set('#fff6e8').lerp(new THREE.Color('#ff9a5a'), flareK * 0.5);
+    this.sunLight.color.set('#fff6e8');
+    if (this.themeSunTint) this.sunLight.color.lerp(this.themeSunTint, 0.7);
+    this.sunLight.color.lerp(new THREE.Color('#ff9a5a'), flareK * 0.5);
     this.sunLight.position.copy(this.sunDir).multiplyScalar(160);
     this.sunLight.castShadow = sunUp > 0.05;
     this.hemi.intensity = this.isMoon ? 0.08 + 0.12 * sunUp : (0.08 + 0.35 * sunUp) * (1 - dustK * 0.3) + dustK * 0.15;
@@ -1288,8 +1449,16 @@ export class OutpostScene {
     if (this.scene.fog instanceof THREE.FogExp2) {
       const day = new THREE.Color('#c99a73').lerp(new THREE.Color('#9a6a48'), dustK);
       this.scene.fog.color.copy(new THREE.Color('#06050a').lerp(day, sunUp));
-      this.scene.fog.density = 0.0022 + dustK * 0.014;
+      this.scene.fog.density = 0.0022 + this.themeFog + dustK * 0.014;
     }
+
+    // mission set dressing
+    if (this.themeBeaconMat) this.themeBeaconMat.emissiveIntensity = 1.2 + (0.5 + 0.5 * Math.sin(this.elapsed * 4)) * (2.5 + flareK * 4);
+    this.dustDevils.forEach((d, i) => {
+      d.rotation.y += dt * (2.5 + i * 0.6);
+      d.position.x += Math.sin(this.elapsed * 0.3 + i) * dt * 2;
+      (d.material as THREE.MeshBasicMaterial).opacity = 0.14 + dustK * 0.18;
+    });
 
     // magnetic field
     this.field.visible = this.shield > 0.01;
@@ -1382,10 +1551,13 @@ export class OutpostScene {
 
     // comms pulses
     this.commsRings.forEach((ring) => {
-      const t = (this.elapsed * 0.35 + (ring.userData.offset as number)) % 1;
-      ring.position.copy(COMMS).add(new THREE.Vector3(0, 3.4, 0)).addScaledVector(this.commsDir, 1.5 + t * 26);
+      // solar conjunction: weak red pulses that die out close to the dish (no signal gets through)
+      const t = (this.elapsed * (this.noSignal ? 0.12 : 0.35) + (ring.userData.offset as number)) % 1;
+      ring.position.copy(COMMS).add(new THREE.Vector3(0, 3.4, 0)).addScaledVector(this.commsDir, 1.5 + t * (this.noSignal ? 6 : 26));
       ring.scale.setScalar(0.8 + t * 3.5);
-      (ring.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.55;
+      const rm = ring.material as THREE.MeshBasicMaterial;
+      if (this.noSignal) rm.color.set('#ff4a4a');
+      rm.opacity = (1 - t) * (this.noSignal ? 0.35 : 0.55);
     });
 
     // rover drives its EVA loop once the player has boarded

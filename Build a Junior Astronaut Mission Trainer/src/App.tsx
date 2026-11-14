@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { SignUpScreen } from './screens/SignUpScreen';
 import { MissionMapScreen } from './screens/MissionMapScreen';
 import { TitleScreen } from './screens/TitleScreen';
@@ -7,6 +7,7 @@ import type { CrewLink } from './net/crewLink';
 import { isMissionUnlocked, loadActivePilot, setActivePilot } from './game/profileStore';
 import type { Location, PilotProfile } from './game/types';
 
+import { music } from './utils/music';
 import './App.css';
 import './styles/immersive.css';
 
@@ -30,6 +31,13 @@ function initialScreen(pilot: PilotProfile | null): Screen {
 export default function App() {
   const [pilot, setPilot] = useState<PilotProfile | null>(() => loadActivePilot());
   const [screen, setScreen] = useState<Screen>({ kind: 'title' });
+
+  useEffect(() => () => music.stop(), []);
+  // soundtrack per screen (missions pick their own inside MissionRunner)
+  useEffect(() => {
+    if (screen.kind === 'signup' || screen.kind === 'avatar') music.play('title');
+    else if (screen.kind === 'map') music.play('map');
+  }, [screen.kind]);
 
   const onPilotUpdate = useCallback((p: PilotProfile) => setPilot(p), []);
 
@@ -98,7 +106,7 @@ export default function App() {
       <div className="rotate-device" role="alert">
         <div className="phone-icon" />
         <b>Rotate your device</b>
-        <span>Outpost Commander is played in landscape, like a cockpit.</span>
+        <span>AstroLab is played in landscape, like a cockpit.</span>
       </div>
     </div>
   );

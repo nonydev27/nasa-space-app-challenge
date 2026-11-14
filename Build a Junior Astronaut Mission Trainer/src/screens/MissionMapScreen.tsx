@@ -1,5 +1,6 @@
-import { useState, type CSSProperties } from 'react';
-import { Users, Lock, Moon, Compass, Play, ClipboardList, Star } from 'lucide-react';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { Users, Lock, Moon, Compass, Play, ClipboardList, Star, Satellite, Music } from 'lucide-react';
+import { music } from '../utils/music';
 import { soundFx } from '../utils/soundEffects';
 import { BADGE_DEFINITIONS, MISSION_CAMPAIGNS, PLANETARY_LOCATIONS } from '../utils/nasaData';
 import { allBadges, isMissionUnlocked, MISSION_ORDER, SANDBOX_ID } from '../game/profileStore';
@@ -8,6 +9,9 @@ import { AvatarBadge } from '../components/AvatarBadge';
 import { MissionGuidelinesModal } from '../components/MissionGuidelinesModal';
 import type { PilotProfile } from '../game/types';
 import { CREW_ERRORS, CrewLink } from '../net/crewLink';
+import { DataExplorer, WeatherStatus } from '../components/DataExplorer';
+import { getSpaceWeather } from '../data/liveData';
+import type { SpaceWeather } from '../data/donki';
 
 // Node centres (% of the track area). The dashed route is drawn through the same points.
 const NODE_POS: Array<[number, number]> = [[9, 52], [24, 30], [38, 62], [53, 38], [68, 66], [86, 40]];
@@ -42,6 +46,16 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
   const [joinOpen, setJoinOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [crewError, setCrewError] = useState<string | null>(null);
+  const [weather, setWeather] = useState<SpaceWeather | null>(null);
+  const [dataOpen, setDataOpen] = useState(false);
+  const [musicOn, setMusicOn] = useState(() => music.isEnabled());
+  useEffect(() => {
+    let live = true;
+    getSpaceWeather().then((w) => live && setWeather(w));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const hostCrew = async (missionId: string, location: 'moon' | 'mars') => {
     setBusy(true);
@@ -89,6 +103,12 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
             </span>
           ))}
         </div>
+        <button type="button" className={`ghost small data-btn ${musicOn ? '' : 'off'}`} onClick={() => setMusicOn(music.toggle())} aria-label={musicOn ? 'Music off' : 'Music on'} title={musicOn ? 'Music off' : 'Music on'}>
+          <Music size={14} />
+        </button>
+        <button type="button" className="ghost small data-btn" onClick={() => { soundFx.playClick(); setDataOpen(true); }}>
+          <Satellite size={14} /> NASA data
+        </button>
         <button type="button" className="join-crew-btn" onClick={() => { soundFx.playClick(); setJoinOpen(true); }}>
           <Users size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} /> Join crew
         </button>
@@ -96,6 +116,12 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
       </header>
 
       <div className="map-body">
+        <button type="button" className={`wx-card glass risk-${weather?.risk ?? 'loading'}`} onClick={() => setDataOpen(true)}>
+          <span className="eyebrow">Real space weather now</span>
+          <WeatherStatus weather={weather} />
+          <b>{weather ? `Solar storm risk: ${weather.risk.toUpperCase()}` : 'Checking the Sun…'}</b>
+          <small>{weather ? `Because ${weather.reason}. This sets how often storms hit your base.` : 'Asking NASA DONKI about the last 30 days.'}</small>
+        </button>
         <div className="mission-track">
           <svg className="track-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             <path d={trackPath()} />
@@ -146,11 +172,13 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
               </span>
               <h2>{mission.title.replace(/^Mission \d+: /, '')}</h2>
               <p className="tagline">{mission.tagline}</p>
+              {unlocked && <p className="tradeoff-line">⚖️ {mission.tradeOff}</p>}
               {unlocked ? <p>{mission.story}</p> : <p className="redacted">Mission file classified. {mission.tagline}.</p>}
               <dl className="brief-facts">
-                <div><dt>Site</dt><dd>{PLANETARY_LOCATIONS[mission.location as 'moon' | 'mars'].site}</dd></div>
+                <div><dt>Site</dt><dd>{PLANETARY_LOCATIONS[mission.location].site}</dd></div>
                 <div><dt>Survive</dt><dd>{mission.goal.targetSols} Sols</dd></div>
-                <div><dt>O₂ / Battery</dt><dd>≥{mission.goal.minO2}% / ≥{mission.goal.minBattery}%</dd></div>
+                <div><dt>Science</dt><dd>{mission.goal.scienceTarget} points</dd></div>
+                <div><dt>Air / Battery</dt><dd>≥{mission.goal.minO2}% / ≥{mission.goal.minBattery}%</dd></div>
                 {result && <div><dt>Best score</dt><dd>{result.bestScore.toLocaleString()} pts</dd></div>}
               </dl>
               <button
@@ -202,6 +230,8 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
           )}
         </aside>
       </div>
+
+      <DataExplorer isOpen={dataOpen} onClose={() => setDataOpen(false)} weather={weather} />
 
       <MissionGuidelinesModal
         isOpen={guidelinesOpen}

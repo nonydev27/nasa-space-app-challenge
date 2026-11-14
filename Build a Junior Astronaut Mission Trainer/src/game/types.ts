@@ -1,4 +1,4 @@
-// Shared types for the immersive storytelling layer of Outpost Commander.
+// Shared types for the immersive storytelling layer of AstroLab.
 
 export type AgeGroup = 'cadet' | 'director';
 export type Location = 'moon' | 'mars';
@@ -27,7 +27,6 @@ export interface MissionResult {
 export interface PilotProfile {
   id: string;
   callsign: string;
-  fullName: string;
   ageGroup: AgeGroup;
   avatarId: string | null;
   /** Player-picked accent colour override for the chosen avatar */

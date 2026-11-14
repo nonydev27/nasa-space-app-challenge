@@ -90,7 +90,9 @@ class SoundManager {
 
       osc.start(now);
       osc.stop(now + 0.35);
-    } catch {}
+    } catch {
+      /* audio blocked by the browser: stay silent */
+    }
   }
 
   playShieldActivate() {
@@ -114,7 +116,9 @@ class SoundManager {
 
       osc.start(now);
       osc.stop(now + 0.45);
-    } catch {}
+    } catch {
+      /* audio blocked by the browser: stay silent */
+    }
   }
 
   playSuccess() {

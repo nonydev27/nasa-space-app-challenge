@@ -28,11 +28,14 @@ import {
   Sprout,
   Zap,
   ClipboardList,
-  Compass
+  Compass,
+  Music,
+  HelpCircle
 } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
-import { formatHour } from '../utils/simulationEngine';
+import { formatHour, SPEEDS, totalLoadKW } from '../utils/simulationEngine';
 import { MISSION_CAMPAIGNS } from '../utils/nasaData';
+import { NASA_CAREER_LIMIT_MSV } from '../data/nasaFacts';
 import { AvatarBadge } from '../components/AvatarBadge';
 import type { SimState } from '../game/simBridge';
 import type { AvatarConfig, ShotId } from '../game/types';
@@ -53,6 +56,9 @@ interface TopBarProps {
   onPause: () => void;
   onSpeed: (s: number) => void;
   onMute: () => void;
+  musicOn?: boolean;
+  onSolHelp?: () => void;
+  onMusic?: () => void;
   onLabels: () => void;
   onMode: () => void;
   onData: () => void;
@@ -61,17 +67,21 @@ interface TopBarProps {
   onFullscreen: () => void;
   onVR: () => void;
   onExit: () => void;
+  /** Space weather status pill */
+  weather?: { live: boolean; risk: string } | null;
 }
 
 export function TopBar(p: TopBarProps) {
   const { sim, mission } = p;
-  const g = mission?.goal;
+  const g = mission ? sim.goal : null;
   const battPct = (sim.batteryKWh / sim.batteryMaxKWh) * 100;
   const objectives = g
     ? [
-        { label: `Sol ${Math.min(sim.sol, g.targetSols)}/${g.targetSols}`, ok: sim.sol >= g.targetSols },
-        { label: `O₂ ≥${g.minO2}%`, ok: sim.oxygenLevel >= g.minO2 },
-        { label: `Batt ≥${g.minBattery}%`, ok: battPct >= g.minBattery }
+        { label: `Sol ${Math.min(sim.sol, g.targetSols)}/${g.targetSols}`, ok: sim.sol > g.targetSols },
+        { label: `Air ≥${g.minO2}%`, ok: sim.oxygenLevel >= g.minO2 },
+        { label: `Battery ≥${g.minBattery}%`, ok: battPct >= g.minBattery },
+        { label: `Science ${Math.min(g.scienceTarget, Math.floor(sim.sciencePoints))}/${g.scienceTarget}`, ok: sim.sciencePoints >= g.scienceTarget },
+        { label: `Food ≥${g.minFoodDays} sol`, ok: sim.foodStockpileSols >= g.minFoodDays }
       ]
     : [];
 
@@ -91,7 +101,12 @@ export function TopBar(p: TopBarProps) {
       </div>
 
       <div className="hud-clock">
-        <span className="sol">SOL {sim.sol}</span>
+        <span className="sol" title="A sol is one day at the base (a Mars day is 24 h 39 min)">SOL {sim.sol}</span>
+        {p.onSolHelp && (
+          <button type="button" className="sol-help" onClick={p.onSolHelp} aria-label="What is a sol?">
+            <HelpCircle size={13} />
+          </button>
+        )}
         <span className="time">{formatHour(sim.hour)}</span>
         <span className="cycle" title={sim.isDaylight ? 'Daylight (Solar peak)' : 'Night (Battery drain)'}>
           {sim.isDaylight ? <Sun size={15} className="text-amber" /> : <Moon size={15} className="text-cyan" />}
@@ -106,7 +121,7 @@ export function TopBar(p: TopBarProps) {
           >
             {sim.paused ? <Play size={12} /> : <Pause size={12} />}
           </button>
-          {[1, 5, 20].map((s) => (
+          {SPEEDS.map((s) => (
             <button
               key={s}
               type="button"
@@ -122,6 +137,12 @@ export function TopBar(p: TopBarProps) {
       </div>
 
       <div className="hud-actions">
+        {p.weather && (
+          <button type="button" className={`wx-pill ${p.weather.live ? 'live' : 'archive'} risk-${p.weather.risk}`} onClick={p.onData} title="Real NASA DONKI space weather sets how often storms happen. Tap to see the data.">
+            <span className="dot" />
+            {p.weather.live ? 'LIVE' : 'ARCHIVE'} · storms {p.weather.risk}
+          </button>
+        )}
         {p.onGuidelines && (
           <IconBtn title="Mission Guidelines & Walkthrough" onClick={p.onGuidelines}>
             <ClipboardList size={17} />
@@ -136,6 +157,11 @@ export function TopBar(p: TopBarProps) {
         <IconBtn title="Glossary" onClick={p.onGlossary}>
           <BookOpen size={17} />
         </IconBtn>
+        {p.onMusic && (
+          <IconBtn title={p.musicOn ? 'Music off' : 'Music on'} on={p.musicOn} onClick={p.onMusic}>
+            <Music size={17} />
+          </IconBtn>
+        )}
         <IconBtn title={p.muted ? 'Unmute' : 'Mute'} onClick={p.onMute}>
           {p.muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
         </IconBtn>
@@ -186,66 +212,69 @@ function Meter({ icon, label, value, pct, sub, tone, onInfo }: { icon: ReactNode
 
 const tone = (pct: number, warn = 50, bad = 25): 'good' | 'warn' | 'bad' => (pct < bad ? 'bad' : pct < warn ? 'warn' : 'good');
 
-export function VitalsPanel({ sim, mission, onGlossary }: { sim: SimState; mission: Mission; onGlossary: (term: string) => void }) {
+export function VitalsPanel({ sim, onGlossary }: { sim: SimState; mission: Mission; onGlossary: (term: string) => void }) {
   const batt = (sim.batteryKWh / sim.batteryMaxKWh) * 100;
   const gen = sim.solarOutputKW + sim.rtgNuclearOutputKW;
-  const load = Object.values(sim.powerAllocations).reduce((a: number, b: number) => a + b, 0);
+  const load = totalLoadKW(sim);
   const net = gen - load;
-  const radPct = Math.min(100, (sim.radiationDoseRate / 1.5) * 100);
-  const sciTarget = mission?.goal.scienceTarget ?? 200;
+  const rad = sim.radiationDoseRate;
+  const radWord = rad > 0.5 ? 'DANGER' : rad > 0.1 ? 'HIGH' : 'Normal';
+  const cadet = sim.mode === 'cadet';
+  const word = (pct: number, warn: number, bad: number) => (pct < bad ? 'Danger' : pct < warn ? 'Low' : 'Good');
   return (
-    <aside className="hud-vitals">
+    <aside className={`hud-vitals ${cadet ? 'cadet' : ''}`} aria-label="Outpost vitals">
       <Meter
         icon={<BatteryCharging size={18} />}
-        label="Battery"
+        label={cadet ? 'Power' : 'Battery'}
         value={`${Math.round(batt)}%`}
         pct={batt}
         tone={tone(batt, 50, 25)}
-        sub={`${net >= 0 ? '▲' : '▼'} ${net >= 0 ? '+' : ''}${net.toFixed(0)} kW · gen ${gen.toFixed(0)} / load ${load}`}
+        sub={cadet ? `${word(batt, 50, 25)} · ${net >= 0 ? '▲ charging' : '▼ draining'}` : `${net >= 0 ? '▲' : '▼'} ${net >= 0 ? '+' : ''}${net.toFixed(0)} kW · make ${gen.toFixed(0)} / use ${load.toFixed(0)}`}
         onInfo={() => onGlossary('RTG')}
       />
       <Meter
         icon={<Wind size={18} />}
-        label="Oxygen"
+        label={cadet ? 'Air' : 'Oxygen'}
         value={`${Math.round(sim.oxygenLevel)}%`}
         pct={sim.oxygenLevel}
         tone={tone(sim.oxygenLevel, 75, 50)}
-        sub={`CO₂ ${Math.round(sim.co2LevelPpm)} ppm`}
+        sub={cadet ? word(sim.oxygenLevel, 75, 50) : `CO₂ ${Math.round(sim.co2LevelPpm)} ppm`}
         onInfo={() => onGlossary('ECLSS')}
       />
       <Meter
         icon={<Radiation size={18} />}
         label="Radiation"
-        value={`${sim.radiationDoseRate.toFixed(2)}`}
-        pct={radPct}
-        tone={sim.radiationDoseRate > 0.5 ? 'bad' : sim.radiationDoseRate > 0.2 ? 'warn' : 'good'}
-        sub={`mSv/h · total ${sim.accumulatedDoseMSv.toFixed(1)} mSv`}
+        value={cadet ? radWord : rad.toFixed(3)}
+        pct={Math.min(100, (rad / 1.0) * 100)}
+        tone={rad > 0.5 ? 'bad' : rad > 0.1 ? 'warn' : 'good'}
+        sub={cadet ? `Crew total ${sim.accumulatedDoseMSv.toFixed(1)} mSv` : `mSv/h · total ${sim.accumulatedDoseMSv.toFixed(2)} of ${NASA_CAREER_LIMIT_MSV} mSv limit`}
         onInfo={() => onGlossary('Sievert')}
       />
       <Meter
         icon={<Wheat size={18} />}
         label="Food"
-        value={`${sim.foodStockpileSols} Sols`}
+        value={`${sim.foodStockpileSols} sols`}
         pct={(sim.foodStockpileSols / 10) * 100}
         tone={tone((sim.foodStockpileSols / 10) * 100, 40, 20)}
-        sub={`Water ${Math.round(sim.waterLevel)}% · crops ${Math.round(sim.cropGrowthProgress)}%`}
+        sub={`Crops ${Math.round(sim.cropGrowthProgress)}% grown${cadet ? '' : ` · water ${Math.round(sim.waterLevel)}%`}`}
+        onInfo={() => onGlossary('Sol')}
       />
-      <Meter
-        icon={<Heart size={18} />}
-        label="Crew"
-        value={`${Math.round(sim.crewHealth)}%`}
-        pct={sim.crewHealth}
-        tone={tone(sim.crewHealth, 60, 30)}
-        sub={`Morale ${Math.round(sim.crewMorale)}%`}
-      />
-      <Meter
-        icon={<FlaskConical size={18} />}
-        label="Science"
-        value={`${Math.round(sim.sciencePoints)}`}
-        pct={(sim.sciencePoints / sciTarget) * 100}
-        tone="info"
-        sub={`Target ${sciTarget}`}
-      />
+      {!cadet && (
+        <>
+          <Meter icon={<Heart size={18} />} label="Crew" value={`${Math.round(sim.crewHealth)}%`} pct={sim.crewHealth} tone={tone(sim.crewHealth, 60, 30)} sub={`Morale ${Math.round(sim.crewMorale)}%`} />
+          <Meter
+            icon={<FlaskConical size={18} />}
+            label="Science"
+            value={`${Math.round(sim.sciencePoints)}`}
+            pct={(sim.sciencePoints / Math.max(1, sim.goal.scienceTarget)) * 100}
+            tone="info"
+            sub={`Goal ${sim.goal.scienceTarget}`}
+          />
+        </>
+      )}
+      {cadet && sim.crewHealth < 70 && (
+        <Meter icon={<Heart size={18} />} label="Crew health" value={`${Math.round(sim.crewHealth)}%`} pct={sim.crewHealth} tone={tone(sim.crewHealth, 60, 30)} sub={word(sim.crewHealth, 60, 30)} />
+      )}
     </aside>
   );
 }

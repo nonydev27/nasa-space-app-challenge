@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { soundFx } from '../utils/soundEffects';
 import { NASA_GLOSSARY } from '../utils/nasaData';

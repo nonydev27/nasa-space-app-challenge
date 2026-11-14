@@ -1,8 +1,13 @@
 // Every player-initiated change to the simulation, as data. Solo play and the
 // multiplayer host both run actions through `applyAction`, so a crewmate's button
-// press over the network behaves exactly like a local one.
+// press over the network behaves exactly like a local one. The relay
+// (server/protocol.js) validates the same shapes before forwarding.
 
+import { findCard } from './decisions';
+import { POWER, resolveDecision, SPEEDS } from '../utils/simulationEngine';
 import type { SimState } from './simBridge';
+
+export type AllocKey = 'eclss' | 'shields' | 'greenhouse' | 'scienceLab' | 'commsRover';
 
 export type SimAction =
   | { type: 'pause' }
@@ -13,13 +18,11 @@ export type SimAction =
   | { type: 'ration' }
   | { type: 'crops' }
   | { type: 'eva' }
-  | { type: 'harvest' };
-
-type AllocKey = 'eclss' | 'shields' | 'greenhouse' | 'scienceLab' | 'commsRover';
+  | { type: 'harvest' }
+  | { type: 'decide'; card: string; option: number };
 
 // Mirrors the slider ranges in PowerMatrix.jsx
-const ALLOC_MAX: Record<AllocKey, number> = { eclss: 50, shields: 60, greenhouse: 40, scienceLab: 40, commsRover: 30 };
-const SPEEDS = [1, 5, 20];
+export const ALLOC_MAX: Record<AllocKey, number> = { eclss: 50, shields: 60, greenhouse: 40, scienceLab: 40, commsRover: 30 };
 
 /** Host-only controls: crewmates can't pause or warp time for everyone. */
 export const HOST_ONLY: ReadonlyArray<SimAction['type']> = ['pause', 'speed'];
@@ -32,8 +35,9 @@ const DESCRIBE: Record<SimAction['type'], (s: SimState) => string> = {
   bunker: (s) => (s.toggles.bunkerLockdown ? 'sealed the crew in the bunker' : 'opened the bunker'),
   ration: (s) => (s.toggles.waterRationing ? 'started water rationing' : 'ended water rationing'),
   crops: (s) => (s.toggles.highYieldCropCycle ? 'switched crops to high-yield' : 'switched crops to normal cycle'),
-  eva: (s) => (s.toggles.roverOnEVA ? 'sent the rover on EVA' : 'recalled the rover'),
-  harvest: () => 'harvested the greenhouse (+2 Sols food)'
+  eva: (s) => (s.toggles.roverOnEVA ? 'sent the rover outside' : 'brought the rover back'),
+  harvest: () => 'harvested the greenhouse (+2 Sols food)',
+  decide: (s) => `made the call: "${s.decisions.at(-1)?.choice ?? ''}"`
 };
 
 /** Reject anything malformed (actions can arrive from the network). */
@@ -44,9 +48,13 @@ export function isValidAction(a: unknown): a is SimAction {
     case 'pause': case 'shield': case 'bunker': case 'ration': case 'crops': case 'eva': case 'harvest':
       return true;
     case 'speed':
-      return SPEEDS.includes(x.value as number);
+      return (SPEEDS as readonly number[]).includes(x.value as number);
     case 'alloc':
-      return typeof x.key === 'string' && x.key in ALLOC_MAX && typeof x.value === 'number' && Number.isFinite(x.value);
+      return typeof x.key === 'string' && Object.hasOwn(ALLOC_MAX, x.key) && typeof x.value === 'number' && Number.isFinite(x.value);
+    case 'decide': {
+      const card = typeof x.card === 'string' ? findCard(x.card) : undefined;
+      return Boolean(card) && Number.isInteger(x.option) && (x.option as number) >= 0 && (x.option as number) < card!.options.length;
+    }
     default:
       return false;
   }
@@ -71,7 +79,7 @@ export function applyAction(s: SimState, a: SimAction, actor?: string): SimState
       next = {
         ...s,
         toggles: { ...s.toggles, magneticShieldActive: on },
-        powerAllocations: { ...s.powerAllocations, shields: on ? Math.max(35, s.powerAllocations.shields) : s.powerAllocations.shields }
+        powerAllocations: { ...s.powerAllocations, shields: on ? Math.max(POWER.deflectorKW, s.powerAllocations.shields) : Math.min(5, s.powerAllocations.shields) }
       };
       break;
     }
@@ -92,12 +100,16 @@ export function applyAction(s: SimState, a: SimAction, actor?: string): SimState
       break;
     case 'harvest':
       if (s.cropGrowthProgress < 70) return s;
-      next = { ...s, foodStockpileSols: s.foodStockpileSols + 2, cropGrowthProgress: 0 };
+      next = { ...s, foodStockpileSols: s.foodStockpileSols + 2, cropGrowthProgress: 0, harvests: s.harvests + 1 };
+      break;
+    case 'decide':
+      next = resolveDecision(s, a.card, a.option);
+      if (next === s) return s;
       break;
   }
   if (actor && a.type !== 'alloc') {
     const hour = `${Math.floor(next.hour).toString().padStart(2, '0')}:${Math.floor((next.hour % 1) * 60).toString().padStart(2, '0')}`;
-    next = { ...next, logs: [{ id: Date.now() + Math.random(), sol: next.sol, hour, text: `[CREW] ${actor} ${DESCRIBE[a.type](next)}.`, type: 'info' }, ...next.logs.slice(0, 30)] };
+    next = { ...next, logs: [{ id: Date.now() + Math.random(), sol: next.sol, hour, text: `[CREW] ${actor} ${DESCRIBE[a.type](next)}.`, type: 'info' as const }, ...next.logs.slice(0, 40)] };
   }
   return next;
 }

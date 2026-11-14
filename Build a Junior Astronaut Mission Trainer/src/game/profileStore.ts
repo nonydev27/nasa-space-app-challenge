@@ -32,7 +32,8 @@ function write(key: string, value: unknown): void {
 
 export function loadPilots(): PilotProfile[] {
   const list = read<PilotProfile[]>(PILOTS_KEY, []);
-  return Array.isArray(list) ? list : [];
+  // Older builds stored a real name; strip it when loading.
+  return Array.isArray(list) ? list.filter((p) => p && typeof p === 'object' && typeof p.id === 'string').map(({ fullName: _drop, ...p }: PilotProfile & { fullName?: string }) => p) : [];
 }
 
 export function loadActivePilot(): PilotProfile | null {
@@ -63,11 +64,11 @@ export function callsignTaken(callsign: string): boolean {
   return loadPilots().some((p) => p.callsign.toLowerCase() === c);
 }
 
-export function createPilot(callsign: string, fullName: string, ageGroup: AgeGroup): PilotProfile {
+/** Only a made-up callsign is stored: no real names, no accounts (players are children). */
+export function createPilot(callsign: string, ageGroup: AgeGroup): PilotProfile {
   const pilot: PilotProfile = {
     id: `pilot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     callsign: callsign.trim(),
-    fullName: fullName.trim(),
     ageGroup,
     avatarId: null,
     accentOverride: null,

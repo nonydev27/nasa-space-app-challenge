@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AvatarConfig, Location, SceneViewState, ShotId } from '../game/types';
-import { OutpostScene, type ModuleId } from './OutpostScene';
+import { OutpostScene, type ModuleId, type SceneTheme } from './OutpostScene';
 
 interface Props {
   location: Location;
+  theme?: SceneTheme;
   avatar: AvatarConfig;
   callsign: string;
   view: SceneViewState;
@@ -17,7 +18,7 @@ interface Props {
 }
 
 /** React host for the imperative three.js outpost. Recreated only when the world itself changes. */
-export function SceneView({ location, avatar, callsign, view, shot, cinematic, showLabels, onModuleClick, onTakeControl, onRoverMount, onReady }: Props) {
+export function SceneView({ location, theme, avatar, callsign, view, shot, cinematic, showLabels, onModuleClick, onTakeControl, onRoverMount, onReady }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<OutpostScene | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function SceneView({ location, avatar, callsign, view, shot, cinematic, s
     try {
       s = new OutpostScene(host, {
         location,
+        theme,
         avatar,
         callsign,
         onModuleClick: (m) => clickRef.current?.(m),
@@ -56,7 +58,7 @@ export function SceneView({ location, avatar, callsign, view, shot, cinematic, s
       s?.dispose();
       setScene(null);
     };
-  }, [location, avatar, callsign]);
+  }, [location, theme, avatar, callsign]);
 
   useEffect(() => {
     scene?.applyView(view);

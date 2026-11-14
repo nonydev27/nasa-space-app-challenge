@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createInitialSimulationState, updateSimulationTick } from '../utils/simulationEngine';
+import { createInitialSimulationState, updateSimulationTick, type SpaceWeatherInput, type StormBasis } from '../utils/simulationEngine';
 import { BADGE_DEFINITIONS, MISSION_CAMPAIGNS } from '../utils/nasaData';
-import { fetchRecentDonkiEvents } from '../utils/donkiApi';
+import { getSpaceWeather, TIMEOUT_MS } from '../data/liveData';
+import { archiveWeather, type SpaceWeather } from '../data/donki';
 import { soundFx } from '../utils/soundEffects';
+import { music, MISSION_THEME } from '../utils/music';
+import { Coach, shouldCoach, SpaceTips } from '../hud/LearnTips';
+import { ActionWheel } from '../hud/ActionWheel';
 
 import { PowerMatrix } from '../components/PowerMatrix';
 import { SubsystemDecks } from '../components/SubsystemDecks';
 import { TelemetryLog } from '../components/TelemetryLog';
 import { IncidentAlertBanner } from '../components/IncidentAlertBanner';
-import { NASADataModal } from '../components/NASADataModal';
+import { DataExplorer } from '../components/DataExplorer';
 import { GlossaryModal } from '../components/GlossaryModal';
 import { MissionGuidelinesModal } from '../components/MissionGuidelinesModal';
-import { Zap, FlaskConical, Activity, ClipboardList, Bot, Unlock, Map, RotateCcw, ChevronRight } from 'lucide-react';
+import { Zap, FlaskConical, Activity, ClipboardList } from 'lucide-react';
 
 import { SceneView } from '../scene/SceneView';
 import type { ModuleId, OutpostScene } from '../scene/OutpostScene';
@@ -19,10 +23,12 @@ import { StoryCinematic } from './StoryCinematic';
 import { LaunchCountdown } from './LaunchCountdown';
 import { Dock, TopBar, VitalsPanel } from '../hud/Hud';
 import { AstroBot, HINT_BONUS, HINT_BUDGET } from '../hud/AstroBot';
+import { DecisionCard } from '../hud/DecisionCard';
+import { Debrief, type Outcome } from '../hud/Debrief';
 import { JetGauge, TouchControls, useIsTouch } from '../hud/TouchControls';
 import { CrewPanel, Toasts, type Toast } from '../hud/CrewPanel';
 import { findAvatar } from '../game/avatars';
-import { buildIntro, buildOutro, type LiveDonkiEvent } from '../game/storylines';
+import { buildIntro, buildOutro } from '../game/storylines';
 import { missionScore, toSceneView, type SimState } from '../game/simBridge';
 import { applyAction, HOST_ONLY, type SimAction } from '../game/actions';
 import { isMissionUnlocked, nextMissionId, recordMissionComplete, SANDBOX_ID } from '../game/profileStore';
@@ -30,20 +36,10 @@ import type { CrewLink, Emote } from '../net/crewLink';
 import { useCrew } from '../net/useCrew';
 import type { Location, PilotProfile, SceneEffects, ShotId, StoryBeat } from '../game/types';
 
+const CAM_CYCLE: ShotId[] = ['overview', 'avatar', 'helmet', 'habitat', 'greenhouse', 'power', 'rover'];
+
 type Phase = 'countdown' | 'loading' | 'intro' | 'play' | 'outro' | 'debrief';
 type Drawer = 'power' | 'systems' | 'log' | null;
-
-interface Outcome {
-  success: boolean;
-  score: number;
-  hintBonus: number;
-  sols: number;
-  science: number;
-  crewHealth: number;
-  failureReason: string;
-  badges: string[];
-  unlocked: string | null;
-}
 
 interface Props {
   pilot: PilotProfile;
@@ -58,14 +54,24 @@ interface Props {
 const looksLikeSim = (s: unknown): s is SimState =>
   Boolean(s && typeof s === 'object' && typeof (s as SimState).sol === 'number' && typeof (s as SimState).toggles === 'object' && typeof (s as SimState).powerAllocations === 'object');
 
+/** Engine input from the fetched space weather. Mission 3 opens on the strongest real event. */
+function weatherInput(w: SpaceWeather, missionId: string): SpaceWeatherInput {
+  let basis: StormBasis[] = w.basis;
+  if (missionId === 'mission-3') {
+    const critical = basis.filter((b) => b.hazard === 'Critical');
+    basis = [...critical, ...basis.filter((b) => b.hazard !== 'Critical')];
+  }
+  return { risk: w.risk, live: w.status === 'live', basis };
+}
+
 export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpdate, onExit, onNext }: Props) {
   const mission = MISSION_CAMPAIGNS.find((m) => m.id === missionId) ?? null;
   const avatar = useMemo(() => findAvatar(pilot.avatarId, pilot.accentOverride), [pilot.avatarId, pilot.accentOverride]);
   const touch = useIsTouch();
 
-  const [sim, setSim] = useState<SimState>(() => createInitialSimulationState(mission, location, pilot.ageGroup));
+  const [weather, setWeather] = useState<SpaceWeather | null>(null);
+  const [sim, setSim] = useState<SimState>(() => createInitialSimulationState(mission, location, pilot.ageGroup, weatherInput(archiveWeather(), missionId)));
   const [phase, setPhase] = useState<Phase>('countdown');
-  const [liveDonki, setLiveDonki] = useState<LiveDonkiEvent[] | null>(missionId === 'mission-3' ? null : []);
   const [fx, setFx] = useState<SceneEffects | undefined>(undefined);
   const [shot, setShot] = useState<ShotId>('establishing');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -88,12 +94,16 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
     phaseRef.current = phase;
   });
 
+  const theme = MISSION_THEME[missionId] ?? 'sandbox';
+  const [coach, setCoach] = useState(() => shouldCoach(pilot.id));
+  const [musicOn, setMusicOn] = useState(() => music.isEnabled());
   const hintBudget = HINT_BUDGET[pilot.ageGroup];
+  const blackout = missionId === 'mission-5';
 
   const toast = useCallback((text: string) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t.slice(-3), { id, text }]);
-    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800);
+    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }, []);
 
   // ------------------------------------------------------------ multiplayer
@@ -133,7 +143,7 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
     for (const id of [...shownPeers.current]) if (!ids.has(id)) { scene.removePeer(id); shownPeers.current.delete(id); }
   }, [sceneReady, crew.peers]);
 
-  // stream our astronaut's pose ~10×/s
+  // stream our astronaut's pose ~10×/s (relay allows 40 frames/s)
   useEffect(() => {
     if (!multiplayer || !crewLink || crew.peers.length === 0) return;
     const t = window.setInterval(() => {
@@ -150,18 +160,23 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
     const wait = Math.max(0, 200 - (Date.now() - lastSent.current));
     const t = window.setTimeout(() => {
       lastSent.current = Date.now();
-      crewLink.sendState(sim, phase === 'play' ? 'play' : phase);
+      crewLink.sendState(sim, phase);
     }, wait);
     return () => window.clearTimeout(t);
   }, [sim, phase, multiplayer, authority, crewLink, crew.peers.length]);
 
   const dispatch = useCallback(
     (action: SimAction) => {
-      if (!authority && HOST_ONLY.includes(action.type)) return;
-      setSim((s) => applyAction(s, action, multiplayer ? pilot.callsign : undefined));
-      if (!authority) crewLink?.sendAction(action); // optimistic locally; commander's state confirms
+      if (!authority && HOST_ONLY.includes(action.type)) {
+        toast('Only the commander can pause or change time speed.');
+        return;
+      }
+      // Crewmates wait for the commander's snapshot so a button never looks "done" when the
+      // commander's simulation rejected it. Power sliders stay instant so dragging feels smooth.
+      if (authority || action.type === 'alloc') setSim((s) => applyAction(s, action, multiplayer ? pilot.callsign : undefined));
+      if (!authority) crewLink?.sendAction(action);
     },
-    [authority, multiplayer, crewLink, pilot.callsign]
+    [authority, multiplayer, crewLink, pilot.callsign, toast]
   );
 
   const emote = useCallback(
@@ -172,61 +187,72 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
     [crewLink]
   );
 
+  // ------------------------------------------------------------ live NASA space weather (every mission)
+  useEffect(() => {
+    let cancelled = false;
+    const timeout = new Promise<SpaceWeather>((resolve) => setTimeout(() => resolve(archiveWeather(`no answer within ${TIMEOUT_MS / 1000} s`)), TIMEOUT_MS + 1000));
+    Promise.race([getSpaceWeather(), timeout]).then((w) => {
+      if (cancelled) return;
+      setWeather(w);
+      // re-plan this run's storms from the real data (only before play starts)
+      if (phaseRef.current !== 'play' && phaseRef.current !== 'outro' && phaseRef.current !== 'debrief') {
+        setSim(createInitialSimulationState(mission, location, pilot.ageGroup, weatherInput(w, missionId)));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mission, location, pilot.ageGroup, missionId]);
+
+  useEffect(() => {
+    if (phase === 'loading' && weather !== null) setPhase('intro');
+  }, [phase, weather]);
+
   // ------------------------------------------------------------ story
-  const ctx = { callsign: pilot.callsign, avatarName: avatar.name, liveDonki };
-  const introBeats = useMemo(() => buildIntro(missionId, ctx), [missionId, pilot.callsign, avatar.name, liveDonki]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ctx = { callsign: pilot.callsign, avatarName: avatar.name, weather };
+  const introBeats = useMemo(() => buildIntro(missionId, ctx), [missionId, pilot.callsign, avatar.name, weather]); // eslint-disable-line react-hooks/exhaustive-deps
   const outroBeats = useMemo<StoryBeat[]>(
     () => (outcome ? buildOutro(missionId, ctx, outcome.success, outcome.sols, outcome.failureReason) : []),
     [outcome] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Mission 3 opens with the live DONKI feed — fetched during the countdown, archive fallback after 5 s.
-  useEffect(() => {
-    if (missionId !== 'mission-3') return;
-    let cancelled = false;
-    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
-    Promise.race([fetchRecentDonkiEvents(30), timeout])
-      .then((events) => { if (!cancelled) setLiveDonki(events as LiveDonkiEvent[]); })
-      .catch(() => { if (!cancelled) setLiveDonki([]); });
-    return () => { cancelled = true; };
-  }, [missionId]);
-
-  useEffect(() => {
-    if (phase === 'loading' && liveDonki !== null) setPhase('intro');
-  }, [phase, liveDonki]);
-
   // ------------------------------------------------------------ simulation clock (authority only)
   useEffect(() => {
-    if (phase !== 'play' || !authority) return;
-    const timer = window.setInterval(() => {
-      setSim((prev) => {
-        const next = updateSimulationTick(prev, 1);
-        if (next === prev) return prev;
-        if (
-          mission &&
-          !next.completed &&
-          !next.failed &&
-          next.sol >= mission.goal.targetSols &&
-          next.oxygenLevel >= mission.goal.minO2 &&
-          next.batteryKWh >= (mission.goal.minBattery / 100) * next.batteryMaxKWh
-        ) {
-          return {
-            ...next,
-            completed: true,
-            unlockedBadges: next.unlockedBadges.includes('badge_flight_director') ? next.unlockedBadges : [...next.unlockedBadges, 'badge_flight_director']
-          };
-        }
-        return next;
-      });
-    }, 1000);
+    if (phase !== 'play' || !authority || coach) return; // clock waits while the training coach is open
+    const timer = window.setInterval(() => setSim((prev) => updateSimulationTick(prev, 1)), 1000);
     return () => window.clearInterval(timer);
-  }, [phase, mission, authority]);
+  }, [phase, authority, coach]);
+
+  // ------------------------------------------------------------ soundtrack
+  const stormCountdown = Boolean(sim.activeAlert && !sim.activeAlert.impactHandled);
+  useEffect(() => {
+    if (phase === 'debrief' || phase === 'outro') music.play('debrief');
+    else if (phase === 'play' && stormCountdown) music.play('storm');
+    else music.play(theme);
+  }, [phase, stormCountdown, theme]);
+  useEffect(() => {
+    if (phase === 'outro' && outcome) music.stinger(outcome.success ? 'victory' : 'defeat');
+  }, [phase, outcome]);
+
+  // ------------------------------------------------------------ your astronaut reacts to what happens
+  const reactions = useRef({ harvests: sim.harvests, survived: sim.stormsSurvived, decisions: sim.decisions.length, alert: sim.activeAlert?.id ?? null });
+  useEffect(() => {
+    const r = reactions.current;
+    const scene = sceneRef.current;
+    if (phase === 'play' && scene) {
+      if (sim.harvests > r.harvests) scene.playerEmote('🎉');
+      else if (sim.stormsSurvived > r.survived) scene.playerEmote('👍');
+      else if (sim.activeAlert && sim.activeAlert.id !== r.alert) scene.playerEmote('⚠️');
+      else if (sim.decisions.length > r.decisions) scene.playerEmote('🚀');
+    }
+    reactions.current = { harvests: sim.harvests, survived: sim.stormsSurvived, decisions: sim.decisions.length, alert: sim.activeAlert?.id ?? null };
+  }, [sim.harvests, sim.stormsSurvived, sim.decisions.length, sim.activeAlert, phase]);
 
   // ------------------------------------------------------------ end of mission → outro
   useEffect(() => {
     if (phase !== 'play' || (!sim.completed && !sim.failed)) return;
     const success = sim.completed && !sim.failed;
-    const hintBonus = Math.max(0, hintBudget - hintsUsed) * HINT_BONUS;
+    const hintBonus = success ? Math.max(0, hintBudget - hintsUsed) * HINT_BONUS : 0;
     const score = missionScore(sim) + hintBonus;
     let unlocked: string | null = null;
     if (success && mission) {
@@ -240,17 +266,37 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
       soundFx.playEmergency();
     }
     soundFx.setThruster(false);
-    setOutcome({ success, score, hintBonus, sols: sim.sol, science: Math.round(sim.sciencePoints), crewHealth: Math.round(sim.crewHealth), failureReason: sim.failureReason, badges: sim.unlockedBadges, unlocked });
+    const stormLog = sim.events.filter((e) => e.kind === 'storm' && e.done).map((e) => sim.stormBasis.find((b) => b.date === e.ref.split('|')[0])).filter(Boolean) as StormBasis[];
+    const opening = mission?.initialState.incomingSolarFlare ? [sim.stormBasis.find((b) => b.hazard === 'Critical') ?? sim.stormBasis[0]] : [];
+    setOutcome({
+      success,
+      score,
+      hintBonus,
+      sols: Math.min(sim.sol, sim.goal.targetSols),
+      science: Math.round(sim.sciencePoints),
+      crewHealth: Math.round(sim.crewHealth),
+      failureReason: sim.failureReason,
+      missedGoals: sim.missedGoals,
+      badges: sim.unlockedBadges,
+      unlocked,
+      history: sim.history,
+      decisions: sim.decisions,
+      doseMSv: sim.accumulatedDoseMSv,
+      stormsSurvived: sim.stormsSurvived,
+      stormsHit: sim.stormsHit,
+      storms: [...opening, ...stormLog],
+      weatherLive: sim.weatherLive
+    });
     setDrawer(null);
     setPhase('outro');
   }, [phase, sim, mission, pilot, onPilotUpdate, hintBudget, hintsUsed]);
 
   // ------------------------------------------------------------ solar storm drama
   const alertImpacted = Boolean(sim.activeAlert?.impactHandled);
-  const alertActive = Boolean(sim.activeAlert);
+  const alertId = sim.activeAlert?.id ?? null;
   useEffect(() => {
-    if (phase === 'play' && alertActive && !alertImpacted) soundFx.playAlert();
-  }, [phase, alertActive, alertImpacted]);
+    if (phase === 'play' && alertId && !alertImpacted) soundFx.playAlert();
+  }, [phase, alertId, alertImpacted]);
   useEffect(() => {
     if (!alertImpacted) return;
     soundFx.playEmergency();
@@ -278,7 +324,7 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
 
   const onTakeControl = useCallback(() => setShot('avatar'), []);
 
-  const afterCountdown = () => setPhase(liveDonki === null ? 'loading' : 'intro');
+  const afterCountdown = () => setPhase(weather === null ? 'loading' : 'intro');
 
   const startPlay = () => {
     setFx(undefined);
@@ -314,6 +360,9 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
     eva: () => dispatch({ type: 'eva' }),
     harvest: () => dispatch({ type: 'harvest' })
   };
+  const decide = useCallback((card: string, option: number) => dispatch({ type: 'decide', card, option }), [dispatch]);
+  const pending = sim.pendingDecision;
+  const chooseOption = useCallback((option: number) => pending && decide(pending, option), [pending, decide]);
 
   const openData = () => {
     setDataOpen(true);
@@ -342,7 +391,7 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
   };
 
   const retry = () => {
-    setSim(createInitialSimulationState(mission, location, pilot.ageGroup));
+    setSim(createInitialSimulationState(mission, location, pilot.ageGroup, weatherInput(weather ?? archiveWeather(), missionId)));
     setOutcome(null);
     setHintsUsed(0);
     setShot('overview');
@@ -352,12 +401,13 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
   const playing = phase === 'play';
   const next = outcome?.success && mission ? nextMissionId(mission.id) : null;
   const nextMission = next ? MISSION_CAMPAIGNS.find((m) => m.id === next) : null;
-  const earnedBadges = BADGE_DEFINITIONS.filter((b) => outcome?.badges.includes(b.id));
+  const unlockedTitle = outcome?.unlocked ? (outcome.unlocked === SANDBOX_ID ? 'Sandbox Outpost' : MISSION_CAMPAIGNS.find((m) => m.id === outcome.unlocked)?.title ?? null) : null;
 
   return (
     <div className={`screen mission-screen ${playing ? 'is-playing' : 'is-cinematic'} ${flash ? 'impact' : ''} ${drawer ? 'drawer-open' : ''} ${touch ? 'touch' : ''} ${multiplayer ? 'crew-on' : ''}`}>
       <SceneView
         location={location}
+        theme={theme}
         avatar={avatar}
         callsign={pilot.callsign}
         view={view}
@@ -374,25 +424,21 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
       <div className="vignette" />
       {flash && <div className="impact-flash" />}
 
-      {phase === 'countdown' && (
-        <LaunchCountdown missionTitle={mission?.title ?? 'Sandbox Outpost'} destination={location} onDone={afterCountdown} />
-      )}
+      {phase === 'countdown' && <LaunchCountdown missionTitle={mission?.title ?? 'Sandbox Outpost'} destination={location} onDone={afterCountdown} />}
 
       {phase === 'loading' && (
         <div className="cine-loading">
           <div className="radar" />
-          <span>Contacting NASA DONKI space-weather database…</span>
+          <span>Checking real space weather with NASA DONKI…</span>
         </div>
       )}
 
-      {phase === 'intro' && (
-        <StoryCinematic beats={introBeats} title={mission?.title ?? 'Sandbox Outpost'} onBeat={onBeat} onFinish={startPlay} />
-      )}
+      {phase === 'intro' && <StoryCinematic beats={introBeats} title={mission?.title ?? 'Sandbox Outpost'} onBeat={onBeat} onFinish={startPlay} />}
 
       {phase === 'outro' && outroBeats.length > 0 && (
         <StoryCinematic
           beats={outroBeats}
-          title={outcome?.success ? 'Mission Debrief' : 'Mission Lost'}
+          title={outcome?.success ? 'Mission Debrief' : 'Mission Not Complete'}
           onBeat={onBeat}
           onFinish={() => { setShot('establishing'); setFx(undefined); setPhase('debrief'); }}
           finishLabel="Debrief"
@@ -410,33 +456,44 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
             labels={labels}
             vrOk={vrOk}
             canControlTime={authority}
+            weather={weather ? { live: weather.status === 'live', risk: weather.risk } : null}
             onPause={act.pause}
             onSpeed={act.speed}
-            onMute={() => setMuted(soundFx.toggleMute())}
+            onMute={() => { setMuted(soundFx.toggleMute()); music.syncMute(); }}
+            musicOn={musicOn}
+            onMusic={() => setMusicOn(music.toggle())}
             onLabels={() => setLabels((l) => !l)}
             onMode={() => setUiMode((m) => (m === 'cadet' ? 'director' : 'cadet'))}
             onData={openData}
             onGlossary={() => openGlossary(null)}
+            onSolHelp={() => openGlossary('Sol')}
             onGuidelines={() => setGuidelinesOpen(true)}
             onFullscreen={fullscreen}
             onVR={enterVR}
             onExit={() => { if (window.confirm(multiplayer ? 'Leave this mission and your crew?' : 'Leave this mission? Progress in this run will be lost.')) onExit(); }}
           />
-          <VitalsPanel sim={sim} mission={mission} onGlossary={openGlossary} />
+          <VitalsPanel sim={simForUi} mission={mission} onGlossary={openGlossary} />
 
           {sim.activeAlert && (
             <div className="hud-alert">
-              <IncidentAlertBanner
-                alert={sim.activeAlert}
-                state={sim}
-                onOpenDONKI={openData}
-                onResolveAlert={(a: string) => (a === 'bunker' ? act.bunker() : act.shield())}
-              />
+              <IncidentAlertBanner alert={sim.activeAlert} state={sim} onOpenDONKI={openData} onResolveAlert={(a: string) => (a === 'bunker' ? act.bunker() : act.shield())} />
             </div>
           )}
 
+          {touch && (
+            <ActionWheel
+              sim={sim}
+              onBunker={act.bunker}
+              onShield={act.shield}
+              onEVA={act.eva}
+              onHarvest={act.harvest}
+              onRation={act.ration}
+              onCamera={() => setShot((s) => CAM_CYCLE[(CAM_CYCLE.indexOf(s) + 1) % CAM_CYCLE.length])}
+              onCheer={() => emote('🎉')}
+            />
+          )}
           <Dock sim={sim} shot={shot} onShot={setShot} onBunker={act.bunker} onShield={act.shield} onEVA={act.eva} onHarvest={act.harvest} onRation={act.ration} />
-          <JetGauge sceneRef={sceneRef} touch={touch} />
+          <JetGauge sceneRef={sceneRef} touch={touch} location={location} />
           {touch && <TouchControls sceneRef={sceneRef} />}
 
           <aside className={`hud-drawer ${drawer ? 'open' : ''}`}>
@@ -451,24 +508,14 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
                   <small>{label}</small>
                 </button>
               ))}
-              <button
-                type="button"
-                className="guidelines-tab-btn"
-                onClick={() => {
-                  soundFx.playClick();
-                  setGuidelinesOpen(true);
-                }}
-                title="Mission Guidelines"
-              >
+              <button type="button" className="guidelines-tab-btn" onClick={() => { soundFx.playClick(); setGuidelinesOpen(true); }} title="Mission Guidelines">
                 <span><ClipboardList size={16} /></span>
                 <small>Guidelines</small>
               </button>
             </nav>
             {drawer && (
               <div className="drawer-body">
-                {drawer === 'power' && (
-                  <PowerMatrix state={simForUi} onUpdateAllocation={act.alloc} onToggleShield={act.shield} onToggleBunker={act.bunker} onGlossaryClick={openGlossary} />
-                )}
+                {drawer === 'power' && <PowerMatrix state={simForUi} onUpdateAllocation={act.alloc} onToggleShield={act.shield} onToggleBunker={act.bunker} onGlossaryClick={openGlossary} />}
                 {drawer === 'systems' && (
                   <SubsystemDecks
                     state={simForUi}
@@ -487,81 +534,54 @@ export function MissionRunner({ pilot, missionId, location, crewLink, onPilotUpd
             )}
           </aside>
 
-          <AstroBot sim={sim} left={hintBudget - hintsUsed} total={hintBudget} onUse={() => setHintsUsed((n) => Math.min(hintBudget, n + 1))} />
+          <AstroBot sim={sim} left={hintBudget - hintsUsed} total={hintBudget} blackout={blackout} onUse={() => setHintsUsed((n) => Math.min(hintBudget, n + 1))} />
 
           {crewLink && crew.code && (
             <CrewPanel
               code={crew.code}
               online={crew.online}
+              status={crew.status}
               you={{ name: pilot.callsign, avatar }}
-              youAreHost={crew.hostId === crew.you}
+              youAreHost={crew.hostId === crew.you || !crew.online}
               hostId={crew.hostId}
               peers={crew.peers}
               onEmote={emote}
               compact={touch || window.innerHeight < 500}
             />
           )}
+
+          <SpaceTips sim={simForUi} enabled={uiMode === 'cadet' && !pending && !coach} onLearnMore={(t) => openGlossary(t)} />
+          {pending && !coach && <DecisionCard cardId={pending} onChoose={chooseOption} />}
+          {coach && <Coach pilotId={pilot.id} onDone={() => setCoach(false)} />}
         </>
       )}
 
       <Toasts items={toasts} />
 
       {phase === 'debrief' && outcome && (
-        <div className="debrief-overlay">
-          <div className={`debrief-card glass ${outcome.success ? 'win' : 'lose'}`}>
-            <span className="eyebrow">{mission?.title ?? 'Sandbox'}</span>
-            <h2>{outcome.success ? 'Mission Accomplished' : 'Mission Failed'}</h2>
-            {!outcome.success && <p className="fail-reason">{outcome.failureReason}</p>}
-            <div className="debrief-stats">
-              <div><span>Sols</span><b>{outcome.sols}</b></div>
-              <div><span>Science</span><b>{outcome.science}</b></div>
-              <div><span>Crew health</span><b>{outcome.crewHealth}%</b></div>
-              <div className="hi"><span>Score</span><b>{outcome.score.toLocaleString()}</b></div>
-            </div>
-            <p className="hint-bonus">
-              <Bot size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-              Hints used {hintsUsed}/{hintBudget}
-              {outcome.hintBonus > 0 && <> · <b>+{outcome.hintBonus}</b> independence bonus</>}
-            </p>
-            {earnedBadges.length > 0 && (
-              <div className="debrief-badges">
-                {earnedBadges.map((b) => <span key={b.id} title={b.description}>{b.icon} {b.title}</span>)}
-              </div>
-            )}
-            {outcome.unlocked && (
-              <div className="unlock-banner">
-                <span className="lock-anim"><Unlock size={22} /></span>
-                <div>
-                  <small>NEW MISSION UNLOCKED</small>
-                  <b>{outcome.unlocked === SANDBOX_ID ? 'Sandbox Outpost' : MISSION_CAMPAIGNS.find((m) => m.id === outcome.unlocked)?.title}</b>
-                </div>
-              </div>
-            )}
-            <div className="debrief-actions">
-              <button type="button" className="ghost" onClick={onExit}>
-                <Map size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
-                Mission map
-              </button>
-              {authority ? (
-                <button type="button" className="ghost" onClick={retry}>
-                  <RotateCcw size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
-                  {multiplayer ? 'Retry with crew' : 'Retry'}
-                </button>
-              ) : (
-                <span className="waiting-note">Waiting for the commander to retry…</span>
-              )}
-              {nextMission && !multiplayer && (
-                <button type="button" className="cta" onClick={() => onNext(nextMission.id, nextMission.location as Location)}>
-                  Next: {nextMission.title.replace(/^Mission \d+: /, '')} <ChevronRight size={15} style={{ display: 'inline', verticalAlign: 'middle' }} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <Debrief
+          outcome={outcome}
+          missionTitle={mission?.title ?? 'Sandbox'}
+          hintsUsed={hintsUsed}
+          hintBudget={hintBudget}
+          unlockedTitle={unlockedTitle}
+          canRetry={authority}
+          multiplayer={multiplayer}
+          next={nextMission && !multiplayer ? { title: nextMission.title.replace(/^Mission \d+: /, ''), onGo: () => onNext(nextMission.id, nextMission.location as Location) } : null}
+          onMap={onExit}
+          onRetry={retry}
+          onData={openData}
+          badgeDefs={BADGE_DEFINITIONS}
+        />
       )}
 
-      <NASADataModal isOpen={dataOpen} onClose={() => setDataOpen(false)} />
-      <GlossaryModal isOpen={glossary.open} initialTerm={glossary.term} onClose={() => setGlossary({ open: false, term: null })} />
+      <DataExplorer
+        isOpen={dataOpen}
+        onClose={() => setDataOpen(false)}
+        weather={weather}
+        crew={{ doseMSv: sim.accumulatedDoseMSv, days: sim.absHours / 24, location }}
+      />
+      {glossary.open && <GlossaryModal key={glossary.term ?? 'all'} isOpen initialTerm={glossary.term} onClose={() => setGlossary({ open: false, term: null })} />}
       <MissionGuidelinesModal isOpen={guidelinesOpen} initialMissionId={mission?.id ?? 'mission-1'} onClose={() => setGuidelinesOpen(false)} />
     </div>
   );

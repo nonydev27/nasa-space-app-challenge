@@ -1,155 +1,70 @@
 # AstroLab: Junior Astronaut Mission Trainer
 
-A landscape 3D mission simulator (React + three.js + TypeScript) for the 2026 NASA Space Apps Challenge.
-Players enlist, pick an astronaut, and unlock five Moon/Mars missions in order, solo or in co-op crews of up to 4.
+**2026 NASA Space Apps Challenge · Build a Junior Astronaut Mission Trainer**
+
+A browser game for ages 7–12. Players run a base on the Moon or Mars and juggle three core resources (**power, air, radiation**, plus food) through five missions. **No choice is free:** every decision card shows its gains and costs, and every lesson cites real NASA data. No download and no account; players pick a made-up callsign and progress stays on the device.
+
+## How it meets the challenge
+
+| Challenge asks for | AstroLab |
+|---|---|
+| Real trade-offs, no free "safe" choice | Decision cards. A test (`validateDeck`) fails the build if any option lacks a gain *and* a cost. Bunker = safe from radiation but no science. Rover = science but power and radiation. Lab power = science but battery. |
+| 2–3 core resources for young players | Cadet mode shows Power, Air, Radiation and Food in plain words. Flight Director mode adds crew health, science and raw numbers. |
+| Link shielding decisions to real space weather | Live NASA DONKI flares, CMEs, storms and SEPs from the last 30 days set storm risk, and each storm alert names the real event it is modelled on. |
+| Communication delay | "Call Mission Control": the Moon reply arrives after the real 2.6 s round trip, Mars after about 24 min (compressed to 24 s), and in Mission 5 (solar conjunction) there is no signal. |
+| Replayability | Cards and storms are planned per run from a random seed plus the live storm risk. |
+| See consequences | The debrief chart shows battery, air and health over the mission, each decision with its lesson, and the crew's radiation dose compared to Earth. |
+| Attribute data in-tool; never show static data as live | The **NASA Data Explorer** labels everything LIVE / ARCHIVE / PUBLISHED / GAME MODEL. See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md). |
+| Plain language | Glossary buttons on every meter; kid-level copy. |
 
 ## Run it
 
+```bash
+npm install
+cp .env.example .env      # add a free key from https://api.nasa.gov (DEMO_KEY is rate-limited)
+npm run dev               # game + NASA proxy + crew relay on http://localhost:5173
+npm run dev:lan           # same, reachable from classroom devices on your Wi-Fi
+```
+
 | Command | What it does |
 |---|---|
-| `npm run dev` | Dev server with hot reload **and** the multiplayer crew relay |
-| `npm run dev:lan` | Same, reachable from other devices on your Wi-Fi (classroom co-op) |
-| `npm run build && npm start` | Production: serves `dist/` + crew relay on one port (`PORT`, default 8080) |
-| `npm run typecheck` | TypeScript check |
+| `npm test` | 106 tests: simulation balance (an attentive bot wins every mission; a hands-off bot fails), decision deck, DONKI mapping and fallbacks, NASA proxy, profile store, relay protocol and integration |
+| `npm run check` | typecheck + lint + tests + build (release checklist) |
+| `npm run build && npm start` | production: `dist/`, `/api/*` NASA proxy, `/crew` WebSocket relay and `/healthz` on one port (`PORT`, default 8080) |
+| `npm run smoke` | starts the production server and checks the page, health, proxy, a two-player room and graceful shutdown |
 
-Multiplayer needs the Node server (`dev`, `preview` or `start`); a purely static host such as GitHub Pages
-can't run the relay. To point a static build at a relay hosted elsewhere, set `VITE_CREW_URL=wss://your-host/crew`.
+### Static hosting vs. Node hosting
 
-## Controls
+- **Node host (recommended)** (Render, Fly, Railway, a VM): everything works, and the NASA key stays on the server (`NASA_API_KEY`).
+- **Static host** (GitHub Pages, Netlify static): the game works, live DONKI falls back to CCMC directly or to the **labelled archive**, OSDR search uses the saved studies, and there is no co-op unless `VITE_CREW_URL=wss://host/crew` points to a relay running elsewhere.
 
-| | Keyboard | Touch |
-|---|---|---|
-| Walk | W A S D / arrows | left joystick |
-| Jump | Space | Jump button |
-| Jetpack | hold Shift (or hold Space mid-air) | hold Thrust |
-| Look (helmet cam) | drag | drag |
-| Emotes (co-op) | 1–8 | crew panel |
+### Deploying the crew relay
 
----
+- WebSockets upgrade on `/crew`. Behind nginx: `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 120s;`
+- Use HTTPS, so the browser uses `wss://` automatically. The relay pings every 25 s, so proxies with ≥60 s idle timeouts are fine.
+- Limits: `CREW_MAX_ROOMS` (200), `CREW_MAX_CONNECTIONS` (800), `CREW_IDLE_ROOM_MIN` (120). `GET /healthz` reports rooms, peers and rejected/dropped counts.
 
-# 🚀 AstroLab: Junior Astronaut Mission Trainer
-### An Open-Source Deep Space Outpost Simulator Powered by Real NASA Science
-**2026 NASA Space Apps Challenge** · *Challenge: Build a Junior Astronaut Mission Trainer*
+## Multiplayer design (co-op, up to 4)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![NASA Space Apps 2026](https://img.shields.io/badge/NASA%20Space%20Apps-2026-critical.svg)](https://www.spaceappschallenge.org/2026/challenges/junior-astronaut-mission-trainer/)
-[![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-8-646cff.svg)](https://vite.dev/)
-[![Open Source](https://img.shields.io/badge/Open%20Source-❤-brightgreen.svg)](#open-source--stem-mission)
+The commander's browser runs the simulation; the relay only forwards validated messages (`server/protocol.js`).
 
-> *"No choice is free — every decision teaches something true about what astronauts and mission planners actually navigate."*
+- **Host-only actions:** guests can't pause, warp time or publish state. This is enforced in the relay *and* in the client. The relay stamps sender IDs, so peers can't impersonate each other.
+- **Guest button presses** aren't applied locally (except power sliders), so a control never looks confirmed when the commander rejected it.
+- **Commander leaves:** the longest-connected guest is promoted and the mission continues from their last snapshot.
+- **Network drop:** the client retries the same crew code 3 times (1 s / 2.5 s / 5 s). If the room is gone (relay restart), it continues solo and tells the player.
+- **Child safety:** emotes only, with no free-text or voice chat; names are sanitized.
 
----
-
-## 🌌 Overview
-
-**AstroLab** is an open-source, interactive web simulation that lets students (ages 7–12, extensible to all ages) run their own lunar or Martian outpost. Players balance genuine competing mission demands:
-- ⚡ **Power Budgeting:** Solar arrays (sunlight/dust dependent), Nuclear RTG baseload, and emergency battery buffers.
-- 🫁 **ECLSS Life Support:** Oxygen scrubbers, CO2 toxicity filtering, and circular water recycling loops.
-- 🛡️ **Radiation Shielding:** Magnetic forcefield deflectors and subterranean regolith bunkers under active solar storms.
-- 🌱 **Hydroponic Food Production:** Microgreen and Martian potato growth cycles informed by NASA space biology research.
-- 📡 **Speed-of-Light Comms Latency:** Real-world communication delays between Earth and the Moon (~1.3s) vs. Mars (4 to 24 minutes).
-
----
-
-## 🔬 Grounded in Real NASA Open Data & Science
-
-AstroLab rejects invented numbers and fantasy physics, pulling directly from NASA's public repositories:
-
-| Dataset / Portal | Real NASA Source | In-Game Simulation Role |
-|---|---|---|
-| **NASA DONKI** | [api.nasa.gov](https://api.nasa.gov/) & [CCMC DONKI](https://kauai.ccmc.gsfc.nasa.gov/DONKI/) | Live and archived Solar Flares (X/M/C class) and Coronal Mass Ejections (CME speeds 450–2,150 km/s) triggering emergency drills. |
-| **NASA OSDR** | [Open Science Data Repository](https://osdr.nasa.gov/) | GeneLab findings: OSD-379 (Arabidopsis plant growth in Apollo lunar soil), OSD-137 (DNA double-strand radiation repair), and OSD-204 (bone loss countermeasures). |
-| **NASA RadLab** | [OSDR Radiation Dosimetry](https://osdr.nasa.gov/bio/repo/?q=&id=radlab) | Calibrated radiation dose rates from real International Space Station dosimeter instruments (ALTEA, Liulin-5, Matroshka phantom torso). |
-| **NASA Mars Trek** | [mars.nasa.gov/resources/mars-trek/](https://mars.nasa.gov/resources/mars-trek/) | Jezero Crater western delta landing coordinates, elevation (-2,400m), and dust storm optical depth ($\tau$). |
-| **Artemis Moon Data** | Lunar Reconnaissance Orbiter (LRO) | Lunar South Pole (Shackleton Crater ice volatiles and peaks of eternal light). |
-
----
-
-## 🎨 Human-Computer Interaction (HCI) Principles for Youth
-
-1. **Cognitive Load Management:** 4 core vitals with distinct child-friendly iconography, color-coded health bands, and plain-language states.
-2. **Dual-Tier Scaffolding:**
-   - **Cadet Mode (Ages 7–9):** Guided by *AstroBot* (AI rover mascot), simplified controls, audio cues, and guided emergency choices.
-   - **Flight Director Mode (Ages 10–12+):** Manual power matrix allocation, full NASA telemetry, and comms delay simulation.
-3. **Direct Manipulation:** Interactive power routing sliders with immediate "What-If" predictive feedback (e.g. *“Lowering ECLSS below 25 kW will starve air scrubbers!”*).
-4. **Sensory & Audio Feedback:** Web Audio API procedural sound engine (no external audio files required, instant play, classroom mute switch).
-5. **In-Context Glossary:** Interactive tooltips for tricky aerospace terms (*Sol*, *Regolith*, *DONKI*, *OSDR*, *ECLSS*, *mSv*, *RTG*).
-
----
-
-## 🕹️ Missions & Gamification
-
-- **5 Campaign Missions:**
-  1. *Lunar Dawn (Artemis Base Camp):* Surviving the lunar sunrise and thermal night transition.
-  2. *Martian Dust Horizon (Jezero Outpost):* Managing an 85% solar drop during a planet-wide dust storm.
-  3. *Solar Storm Alarm (DONKI X-Class Alert):* Evacuating the crew 2.5m underground into the regolith bunker within 45 seconds.
-  4. *The Greenhouse Crisis (OSDR Botany):* High-yield space crop cultivation under water rationing.
-  5. *Deep Space Latency Crisis:* Autonomous emergency protocols during Mars-Earth comms blackout.
-- **Freeform Outpost Sandbox:** Choose Moon or Mars, adjust environmental hazards, and test custom outpost configurations.
-- **Astronaut Wings & Badges:** Unlock achievements like *Solar Storm Survivor*, *Master of the Grid*, and *Martian Botanist*.
-
----
-
-## 🚀 Quick Start (Local Development)
-
-AstroLab requires [Node.js](https://nodejs.org/) (v18+) and runs directly in the browser with zero external accounts or downloads:
-
-```bash
-# Clone the repository
-git clone https://github.com/nasa/spaceapps.git # or your team fork
-cd challenge04
-
-# Install dependencies
-npm install
-
-# (Optional) Add your personal free NASA API key in .env
-echo "VITE_NASA_API_KEY=your_key_here" > .env
-
-# Start the local development server with Hot Module Replacement (HMR)
-npm run dev
-
-# Build production bundle
-npm run build
-```
-
----
-
-## 📂 Project Architecture
+## Project layout
 
 ```
-challenge04/
-├── docs/
-│   └── plan.md                  # Comprehensive challenge plan & trade-off specification
-├── public/                      # Static assets & icons
-├── src/
-│   ├── components/
-│   │   ├── AstroBotGuide.jsx    # HCI AI rover assistant
-│   │   ├── GlossaryModal.jsx    # Plain-language space glossary
-│   │   ├── IncidentAlertBanner.jsx # DONKI solar storm decision banner
-│   │   ├── MissionBriefingModal.jsx # Campaign mission selector
-│   │   ├── MissionDebriefModal.jsx  # Scorecard & badge award screen
-│   │   ├── NASADataModal.jsx    # DONKI, OSDR, RadLab, and Mars Trek explorer
-│   │   ├── Navbar.jsx           # Top telemetry bar & mode toggle
-│   │   ├── OutpostVisualizer.jsx# 2D animated cutaway of the outpost
-│   │   ├── PowerMatrix.jsx      # Direct-manipulation power routing grid
-│   │   ├── SubsystemDecks.jsx   # DONKI radar, ECLSS, OSDR greenhouse, and Comms
-│   │   ├── TelemetryLog.jsx     # Live event streaming terminal
-│   │   └── VitalGauges.jsx      # Top 4 child-friendly vital cards
-│   ├── utils/
-│   │   ├── donkiApi.js          # Live NASA DONKI API client + offline fallback
-│   │   ├── nasaData.js          # Curated real NASA datasets, glossary & badges
-│   │   ├── simulationEngine.js  # Multi-variable differential survival simulation
-│   │   └── soundEffects.js      # Browser Web Audio API procedural synthesizer
-│   ├── App.jsx                  # Main mission commander application loop
-│   ├── App.css                  # NASA command deck glassmorphism design system
-│   └── main.jsx
-├── package.json
-└── vite.config.js
+server/            index.js (prod server) · relay.js + protocol.js (co-op) · nasaProxy.js (DONKI/OSDR)
+scripts/smoke.mjs  production smoke test
+src/data/          nasaFacts.ts (every real number + source) · donki.ts (mapping) · liveData.ts (fetch + fallbacks)
+src/utils/         simulationEngine.ts (game model) · nasaData.ts (missions, glossary, badges)
+src/game/          decisions.ts (trade-off cards) · actions.ts · storylines.ts · profileStore.ts
+src/hud/ src/components/ src/screens/ src/scene/   UI and three.js outpost
 ```
 
----
+## License
 
-## 📜 Open-Source & STEM Mission
-
-AstroLab is released under the **MIT Open Source License**. It was developed for the **2026 NASA Space Apps Challenge** to provide free, accessible, and scientifically grounded space education to classrooms, museums, science clubs, and aspiring junior astronauts worldwide.
+MIT. NASA images are public domain and credited in-game. NASA does not endorse this project.

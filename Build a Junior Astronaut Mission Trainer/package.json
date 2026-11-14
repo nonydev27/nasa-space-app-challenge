@@ -9,10 +9,14 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "lint": "eslint .",
+    "test": "vitest run",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "dev:lan": "vite --host",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.72.0",
@@ -35,6 +39,10 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }

@@ -8,6 +8,7 @@ import { soundFx } from '../utils/soundEffects';
 interface Props {
   code: string;
   online: boolean;
+  status?: 'online' | 'reconnecting' | 'offline';
   you: { name: string; avatar: AvatarConfig };
   youAreHost: boolean;
   hostId: string | null;
@@ -17,7 +18,7 @@ interface Props {
   compact?: boolean;
 }
 
-export function CrewPanel({ code, online, you, youAreHost, hostId, peers, onEmote, compact = false }: Props) {
+export function CrewPanel({ code, online, status = online ? 'online' : 'offline', you, youAreHost, hostId, peers, onEmote, compact = false }: Props) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(!compact);
 
@@ -26,6 +27,7 @@ export function CrewPanel({ code, online, you, youAreHost, hostId, peers, onEmot
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+      if (document.querySelector('.decision-backdrop')) return; // number keys pick decision options
       const n = Number(e.key);
       if (n >= 1 && n <= EMOTES.length) onEmote(EMOTES[n - 1]);
     };
@@ -51,6 +53,15 @@ export function CrewPanel({ code, online, you, youAreHost, hostId, peers, onEmot
         <b>{code}</b>
         <span className="count">{peers.length + 1}/4</span>
       </button>
+      <p className={`crew-status ${status}`} role="status">
+        {status === 'reconnecting'
+          ? 'Reconnecting to your crew… your screen keeps the mission running.'
+          : status === 'offline'
+            ? 'Crew link lost. You are flying solo; the mission continues on your screen.'
+            : youAreHost
+              ? 'You are the commander. Your screen runs the mission.'
+              : `${peers.find((p) => p.id === hostId)?.name ?? 'The commander'} is commander and runs the mission.`}
+      </p>
       {open && (
         <div className="crew-body">
           <button type="button" className="copy-code" onClick={copy}>

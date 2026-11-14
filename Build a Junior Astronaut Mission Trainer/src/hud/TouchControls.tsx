@@ -113,7 +113,7 @@ export function TouchControls({ sceneRef }: { sceneRef: RefObject<OutpostScene |
 }
 
 /** Jetpack fuel + altitude readout, polled straight from the scene so the rest of the HUD doesn't re-render. */
-export function JetGauge({ sceneRef, touch }: { sceneRef: RefObject<OutpostScene | null>; touch: boolean }) {
+export function JetGauge({ sceneRef, touch, location = 'moon' }: { sceneRef: RefObject<OutpostScene | null>; touch: boolean; location?: 'moon' | 'mars' }) {
   const [st, setSt] = useState<PlayerStatus>({ fuel: 1, airborne: false, thrusting: false, altitude: 0, inRover: false, nearRover: false });
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -147,6 +147,11 @@ export function JetGauge({ sceneRef, touch }: { sceneRef: RefObject<OutpostScene
         <span className="jg-val">{st.airborne ? `${st.altitude.toFixed(1)} m` : `${pct}%`}</span>
         {!touch && <span className="jg-keys"><kbd>Space</kbd> jump · hold <kbd>Shift</kbd> thrust</span>}
       </div>
+      {st.airborne && (
+        <div className="gravity-note" role="status">
+          {location === 'moon' ? '🌙 Moon gravity is 1/6 of Earth\'s: you float up about 6× higher!' : '🔴 Mars gravity is 3/8 of Earth\'s: you jump about 2.6× higher!'}
+        </div>
+      )}
     </div>
   );
 }

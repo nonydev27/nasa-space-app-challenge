@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { soundFx } from '../utils/soundEffects';
+import { music } from '../utils/music';
 
 interface Props {
   onPlay: () => void;
@@ -78,6 +79,7 @@ export function TitleScreen({ onPlay }: Props) {
   const play = () => {
     if (warping) return;
     soundFx.playWarp();
+    music.play('title');
     setWarping(true);
   };
 

@@ -13,7 +13,6 @@ interface Props {
 export function SignUpScreen({ onSignedIn }: Props) {
   const [pilots, setPilots] = useState<PilotProfile[]>(() => loadPilots());
   const [callsign, setCallsign] = useState('');
-  const [fullName, setFullName] = useState('');
   const [ageGroup, setAgeGroup] = useState<AgeGroup>('cadet');
   const [error, setError] = useState<string | null>(null);
 
@@ -23,9 +22,8 @@ export function SignUpScreen({ onSignedIn }: Props) {
     if (cs.length < 2 || cs.length > 16) return setError('Callsign must be 2–16 characters.');
     if (!/^[\p{L}\p{N} _-]+$/u.test(cs)) return setError('Use letters, numbers, spaces, - or _ only.');
     if (callsignTaken(cs)) return setError('That callsign is taken on this device. Pick another!');
-    if (!fullName.trim()) return setError('Tell Mission Control your name.');
     soundFx.playSuccess();
-    onSignedIn(createPilot(cs, fullName, ageGroup));
+    onSignedIn(createPilot(cs, ageGroup));
   };
 
   const resume = (p: PilotProfile) => {
@@ -49,13 +47,11 @@ export function SignUpScreen({ onSignedIn }: Props) {
         <div className="hero-copy">
           <span className="eyebrow">NASA SPACE APPS 2026 · JUNIOR ASTRONAUT MISSION TRAINER</span>
           <h1>
-            Outpost
-            <br />
-            Commander
+            Astro<span className="accent">Lab</span>
           </h1>
           <p>
-            Run a real base on the Moon and Mars. Balance power, air, food and radiation using NASA DONKI space-weather and OSDR
-            biology data. Every choice has a trade-off.
+            Run a base on the Moon or Mars. Keep the power on, the air clean and the crew safe from solar storms, using real NASA
+            space-weather and space-biology data. Every choice costs something.
           </p>
           <ul className="hero-steps">
             <li><b>1</b> Enlist</li>
@@ -72,10 +68,6 @@ export function SignUpScreen({ onSignedIn }: Props) {
             <span>Callsign</span>
             <input value={callsign} onChange={(e) => { setCallsign(e.target.value); setError(null); }} placeholder="e.g. StarHopper" maxLength={16} autoFocus />
           </label>
-          <label>
-            <span>Your name</span>
-            <input value={fullName} onChange={(e) => { setFullName(e.target.value); setError(null); }} placeholder="First name is fine" maxLength={40} />
-          </label>
           <fieldset className="age-choice">
             <legend>Training track</legend>
             <button type="button" className={ageGroup === 'cadet' ? 'on' : ''} onClick={() => { soundFx.playClick(); setAgeGroup('cadet'); }}>
@@ -89,7 +81,7 @@ export function SignUpScreen({ onSignedIn }: Props) {
           </fieldset>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button type="submit" className="cta">Enlist &amp; Continue →</button>
-          <p className="fine-print">Your profile and progress are saved on this device only.</p>
+          <p className="fine-print">No account, no real name. Make up a callsign; your progress stays on this device.</p>
         </form>
 
         {pilots.length > 0 && (
