@@ -1,0 +1,1442 @@
+/* ==========================================================================
+   FIELD SHIFT: ADAPTING FARMS WITH NASA DATA
+   NASA Space Apps 2026 Challenge Decision Support System
+   ========================================================================== */
+
+:root {
+  --bg-dark: #0a0e17;
+  --bg-surface: #101623;
+  --bg-card: #151d2e;
+  --bg-card-hover: #1b263b;
+  --border-subtle: #233047;
+  --border-bright: #3b4e70;
+
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-bright: #ffffff;
+
+  /* Agricultural Palette */
+  --accent-green: #10b981;
+  --accent-emerald: #059669;
+  --accent-gold: #f59e0b;
+  --accent-cyan: #06b6d4;
+  --accent-blue: #38bdf8;
+  --accent-red: #ef4444;
+  --accent-purple: #c084fc;
+}
+
+.field-shift-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at 50% 0%, #152238 0%, #0a0e17 75%);
+  color: var(--text-main);
+  font-family: inherit;
+}
+
+/* ==========================================================================
+   1. HEADER & REGION PICKER
+   ========================================================================== */
+.farm-header {
+  background: rgba(16, 22, 35, 0.9);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+
+.header-brand-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nasa-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(11, 61, 145, 0.35);
+  border: 1px solid #0b3d91;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.nasa-pill {
+  background: #fc3d21;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.space-apps-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #93c5fd;
+  letter-spacing: 0.5px;
+}
+
+.title-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.title-field {
+  color: var(--accent-green);
+  letter-spacing: 0.5px;
+}
+
+.title-sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.app-tagline {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.header-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-bright);
+}
+
+.region-selector-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 24px;
+  background: rgba(10, 14, 23, 0.7);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: auto;
+}
+
+.ribbon-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.region-pills-list {
+  display: flex;
+  gap: 8px;
+}
+
+.region-pill-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.region-pill-btn:hover {
+  color: var(--text-bright);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.region-pill-btn.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--accent-green);
+  color: #a7f3d0;
+  font-weight: 700;
+}
+
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pill-loc {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+/* Main Layout */
+.main-content-layout {
+  flex: 1;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 16px 20px 60px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ==========================================================================
+   2. FIELD GIS MAP & PARCEL INSPECTOR
+   ========================================================================== */
+.field-gis-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.gis-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: rgba(10, 14, 23, 0.75);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.gis-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gis-icon { font-size: 24px; }
+
+.gis-title-group h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.gis-location-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.layer-pills-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.layer-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.layer-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-bright);
+}
+
+.layer-btn.active {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #000;
+}
+
+.gis-viewer-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  min-height: 380px;
+}
+
+@media (max-width: 900px) {
+  .gis-viewer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gis-map-viewport {
+  position: relative;
+  background: #0f172a;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.6);
+}
+
+/* Layer Map Backgrounds */
+.gis-map-viewport.layer-ndvi {
+  background: radial-gradient(circle at 40% 40%, #1e3a29 0%, #0a130e 80%);
+}
+
+.gis-map-viewport.layer-smap {
+  background: radial-gradient(circle at 40% 40%, #172554 0%, #060e24 80%);
+}
+
+.gis-map-viewport.layer-ecostress {
+  background: radial-gradient(circle at 40% 40%, #451a03 0%, #130702 80%);
+}
+
+.gis-map-viewport.layer-srtm {
+  background: radial-gradient(circle at 40% 40%, #334155 0%, #0f172a 80%);
+}
+
+.gis-map-viewport.layer-trueColor {
+  background: radial-gradient(circle at 40% 40%, #3f3f26 0%, #151508 80%);
+}
+
+.gis-legend-overlay {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  background: rgba(10, 14, 23, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 10;
+}
+
+.legend-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.legend-scale {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.gis-compass {
+  position: absolute;
+  bottom: 12px;
+  right: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* Interactive Field Parcels Simulation */
+.parcels-interactive-overlay {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 650px;
+}
+
+.parcel-boundary-box {
+  height: 150px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  cursor: pointer;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.25s ease;
+  position: relative;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.parcel-boundary-box:hover {
+  transform: translateY(-3px);
+  border-color: #fff;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+}
+
+.parcel-boundary-box.selected {
+  border-color: var(--accent-green);
+  border-width: 3px;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+}
+
+/* Parcel Heatmap Colors */
+.fill-bare { background: linear-gradient(135deg, rgba(180, 83, 9, 0.7), rgba(120, 53, 15, 0.85)); }
+.fill-moderate { background: linear-gradient(135deg, rgba(101, 163, 13, 0.65), rgba(77, 124, 15, 0.85)); }
+.fill-lush { background: linear-gradient(135deg, rgba(16, 185, 129, 0.7), rgba(5, 150, 105, 0.85)); }
+
+.fill-drought { background: linear-gradient(135deg, rgba(239, 68, 68, 0.7), rgba(185, 28, 28, 0.85)); }
+.fill-adequate { background: linear-gradient(135deg, rgba(56, 189, 248, 0.65), rgba(2, 132, 199, 0.85)); }
+.fill-surplus { background: linear-gradient(135deg, rgba(37, 99, 235, 0.7), rgba(29, 78, 216, 0.85)); }
+
+.fill-heat-stress { background: linear-gradient(135deg, rgba(244, 63, 94, 0.75), rgba(190, 18, 60, 0.85)); }
+.fill-moderate-et { background: linear-gradient(135deg, rgba(245, 158, 11, 0.7), rgba(217, 119, 6, 0.85)); }
+.fill-low-et { background: linear-gradient(135deg, rgba(16, 185, 129, 0.65), rgba(4, 120, 87, 0.85)); }
+
+.fill-steep { background: linear-gradient(135deg, rgba(168, 85, 247, 0.7), rgba(126, 34, 206, 0.85)); }
+.fill-gentle { background: linear-gradient(135deg, rgba(100, 116, 139, 0.65), rgba(51, 65, 85, 0.85)); }
+
+.parcel-tag-id {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  display: block;
+}
+
+.parcel-acres-tag {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.parcel-metric-badge {
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 6px;
+  border-radius: 4px;
+  width: fit-content;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Sidebar Telemetry Card */
+.parcel-telemetry-card {
+  padding: 16px;
+  border-left: 1px solid var(--border-subtle);
+  background: rgba(10, 14, 23, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.telemetry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.telemetry-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.acres-badge {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.metrics-readout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.metric-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.box-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.box-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.box-status {
+  font-size: 9px;
+  color: var(--accent-green);
+}
+
+.regional-satellite-highlights {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.regional-satellite-highlights h5 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: #93c5fd;
+}
+
+.regional-satellite-highlights ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+
+/* ==========================================================================
+   3. CONTROLS TWO-COL GRID: PRIORITIES + CLIMATE STRESS TESTER
+   ========================================================================= */
+.controls-two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .controls-two-col-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.farmer-priorities-card,
+.climate-tester-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.priorities-header,
+.tester-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.title-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-icon { font-size: 24px; }
+
+.title-area h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.card-sub {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.presets-row,
+.scenarios-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preset-label,
+.scenario-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.preset-chip,
+.scenario-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-chip:hover,
+.scenario-chip:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--border-bright);
+}
+
+/* Sliders Grid */
+.sliders-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .sliders-grid { grid-template-columns: 1fr; }
+}
+
+.priority-slider-box {
+  background: rgba(10, 14, 23, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slider-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.slider-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-bright);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.slider-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.slider-input {
+  width: 100%;
+  accent-color: var(--accent-green);
+  cursor: pointer;
+}
+
+.slider-input.accent-blue { accent-color: var(--accent-blue); }
+.slider-input.accent-green { accent-color: var(--accent-green); }
+.slider-input.accent-gold { accent-color: var(--accent-gold); }
+.slider-input.accent-purple { accent-color: var(--accent-purple); }
+
+.slider-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Climate Stress Controls */
+.stress-controls-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.climate-slider-box {
+  background: rgba(10, 14, 23, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slider-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.slider-lbl {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.slider-val.red { color: #f87171; }
+.slider-val.blue { color: #60a5fa; }
+.slider-val.green { color: #34d399; }
+
+.climate-range-input {
+  width: 100%;
+  accent-color: var(--accent-gold);
+  cursor: pointer;
+}
+
+.slider-subtext {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.vulnerability-summary-capsule {
+  display: flex;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(10, 14, 23, 0.6);
+}
+
+.vulnerability-summary-capsule.drought {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.vulnerability-summary-capsule.wet {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.capsule-icon { font-size: 22px; }
+
+.capsule-text strong {
+  display: block;
+  font-size: 12px;
+  color: var(--text-bright);
+}
+
+.capsule-text p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   4. ROTATION STRATEGY COMPARISON ENGINE
+   ========================================================================== */
+.rotation-matrix-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.section-title-row h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.section-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.comparison-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-bright);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.strategies-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.strategy-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.25s ease;
+  position: relative;
+}
+
+.strategy-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-bright);
+  background: var(--bg-card-hover);
+}
+
+.strategy-card.top-match {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.25);
+}
+
+.strategy-card.baseline-card {
+  border-style: dashed;
+  opacity: 0.95;
+}
+
+.card-top-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rank-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.rank-badge.gold { background: var(--accent-green); color: #000; }
+.rank-badge.standard { background: #3b82f6; color: #fff; }
+.rank-badge.baseline { background: #64748b; color: #fff; }
+
+.category-pill {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.composite-score-circle {
+  display: flex;
+  align-items: baseline;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.score-number {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.score-denom {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.strat-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-bright);
+  line-height: 1.35;
+}
+
+.crop-sequence-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(10, 14, 23, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.chain-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.sequence-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sequence-step {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a7f3d0;
+}
+
+.chain-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Tangible Metrics 4-grid */
+.tangible-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.t-metric-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.t-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.t-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.t-val-sm {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.t-sub {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.t-sub.green { color: #86efac; font-weight: 700; }
+.t-sub.neutral { color: var(--text-muted); }
+
+.why-suggested-snippet {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-main);
+  background: rgba(16, 185, 129, 0.08);
+  border-left: 3px solid var(--accent-green);
+  padding: 6px 10px;
+  border-radius: 0 6px 6px 0;
+}
+
+.nasa-evidence-snippet {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #bae6fd;
+}
+
+.trade-off-alert-box {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #fed7aa;
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 3px solid var(--accent-gold);
+  padding: 6px 10px;
+  border-radius: 0 6px 6px 0;
+}
+
+.view-evidence-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-bright);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  transition: all 0.2s;
+}
+
+.view-evidence-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+/* ==========================================================================
+   5. FOOTER
+   ========================================================================== */
+.field-shift-footer {
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(10, 14, 23, 0.95);
+  padding: 24px 20px;
+}
+
+.footer-content {
+  max-width: 1360px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.footer-brand strong {
+  color: var(--accent-green);
+}
+
+.footer-brand p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.footer-partners {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.footer-links {
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.footer-links a {
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   6. MODALS
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 15, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-dialog {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-dialog.modal-lg { max-width: 860px; }
+.modal-dialog.modal-md { max-width: 650px; }
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(10, 14, 23, 0.6);
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-bright);
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(10, 14, 23, 0.6);
+}
+
+.action-btn {
+  background: var(--accent-green);
+  color: #000;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #34d399;
+}
+
+/* Evidence Modal specifics */
+.evidence-overview-box {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 600px) {
+  .evidence-overview-box { grid-template-columns: repeat(2, 1fr); }
+}
+
+.overview-metric .lbl {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.overview-metric .val {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.evidence-section h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--text-bright);
+}
+
+.section-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-main);
+}
+
+.evidence-data-card {
+  background: rgba(56, 189, 248, 0.1);
+  border-left: 3px solid var(--accent-blue);
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e0f2fe;
+}
+
+.uncertainty-card {
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid var(--accent-gold);
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #fef3c7;
+}
+
+.disclaimer-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  color: #fde68a;
+  font-style: italic;
+}
+
+.highlight-agronomist {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.agronomist-intro {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agronomist-checklist {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+/* Glossary Modal specifics */
+.glossary-search-box {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.search-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-bright);
+  padding: 8px 14px;
+  font-size: 13px;
+  outline: none;
+}
+
+.glossary-split-grid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  flex: 1;
+  min-height: 260px;
+}
+
+.terms-sidebar {
+  border-right: 1px solid var(--border-subtle);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.term-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.term-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-bright);
+}
+
+.term-btn.active {
+  background: var(--accent-green);
+  color: #000;
+  font-weight: 800;
+}
+
+.term-content-view {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.term-content-view h4 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text-bright);
+}
+
+.definition-box {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.takeaway-box {
+  display: flex;
+  gap: 10px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.takeaway-box .icon { font-size: 20px; }
+
+.takeaway-box strong {
+  display: block;
+  font-size: 11px;
+  color: #a7f3d0;
+  margin-bottom: 2px;
+}
+
+.takeaway-box p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #d1fae5;
+}
+
+/* Sensors Modal specifics */
+.sensors-intro {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sensors-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sensor-detail-card {
+  background: rgba(10, 14, 23, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sensor-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sensor-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.sensor-agency {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sensor-meta-row {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sensor-meta-row strong {
+  color: var(--text-bright);
+}
+
+.sensor-data-box {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-main);
+}
+
+.sensor-farmer-benefit {
+  background: rgba(16, 185, 129, 0.08);
+  border-left: 3px solid var(--accent-green);
+  padding: 4px 8px;
+  border-radius: 0 4px 4px 0;
+  font-size: 11px;
+  color: #a7f3d0;
+}
+
+.data-harmonization-note {
+  background: rgba(11, 61, 145, 0.15);
+  border: 1px solid #1d4ed8;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.data-harmonization-note h5 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: #93c5fd;
+}
+
+.data-harmonization-note p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #cbd5e1;
+}

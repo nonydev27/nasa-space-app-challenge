@@ -1,89 +1,167 @@
-Join the discussion on Space Apps Connect
-.
-Space Apps Logo 2026 color
+# 🌾 Field Shift: Adapting Farms with NASA Data
+### 2026 NASA Space Apps Challenge — Project Architecture & Implementation Plan
 
-    About Us
-    Awards
+> **Challenge:** [Field Shift: Adapting Farms with NASA Data](https://www.spaceappschallenge.org/2026/challenges/adapting-farms-with-nasa-data/)  
+> **Event:** 2026 NASA Space Apps Challenge  
+> **Difficulty:** Advanced / Intermediate  
+> **Subjects:** Earth Science, Software, Arts & Multimedia  
+> **Connect:** [Space Apps Connect](https://github.com/nasa/spaceapps) | [About Us](https://www.spaceappschallenge.org/about/) | [Awards](https://www.spaceappschallenge.org/awards/) | [2026 Challenges](https://www.spaceappschallenge.org/2026/challenges/)
 
-    Home
-    2026 NASA Space Apps Challenge
-    2026 Challenges
-    adapting-farms-with-nasa-data
+---
 
-Nevada farmer Denise Moyle in her alfalfa fields.
-Field Shift: Adapting Farms with NASA Data
-Join the Challenge
+## 1. Challenge Overview & Problem Statement
 
-    DetailsResourcesTeams
+Farmers around the world navigate shifting temperatures, changing rainfall patterns, water shortages, extreme weather, and declining soil health. These compounding pressures make it difficult to select crop rotations that protect fields, conserve water, and maintain multigenerational agricultural viability.
 
-Event
-2026 NASA Space Apps Challenge
-Difficulty
-Advanced
-Intermediate
-Subjects
-Arts & Multimedia
-Earth Science
-Software
+**The Challenge:** Design and build an interactive decision-support tool that combines **NASA Earth observations** with local soil information, crop characteristics, and farmer priorities to help growers explore rotation strategies that strengthen soil health and adapt their farms to changing climate conditions.
 
-Farmers around the world navigate shifting temperatures, changing rainfall patterns, water shortages, extreme weather, and declining soil health. These pressures make it difficult to choose crop rotations that protect fields, conserve water, and support long‑term resilience. Your challenge is to create a decision‑support tool that uses NASA Earth observations along with local soil information, crop characteristics, and farmer priorities to help farmers explore rotation strategies that could strengthen soil health and adapt their farms to changing conditions.
+### Multigenerational Background & Inspiration
+This challenge is inspired in part by real multigenerational farming experiences — such as Nevada alfalfa farmer **Denise Moyle**, who manages high-desert irrigation in the Great Basin amid deepening hydrological droughts. Many farming families have lived through difficult seasons where better visibility into shifting soil moisture, heat stress, and bare-soil vulnerabilities could have unlocked healthier, more resilient rotation choices.
 
-Background
+Selecting new crops to introduce into a rotation is notoriously difficult:
+- A crop that improves soil structure in one region may consume too much groundwater in another.
+- Introducing a cover crop may interrupt pest cycles or fix nitrogen, but could conflict with local planting calendars, demand specialized seed drills, or lack local market buyers.
+- Monocultures leave soil bare during critical shoulder seasons, accelerating wind and water erosion.
 
-Farmers face increasingly complex decisions as temperatures shift, rainfall becomes less predictable, and soil health declines across many regions. Water shortages, erosion, nutrient depletion, and extreme weather events add further uncertainty. Selecting new crops to add to a rotation can be difficult, because a crop that improves soil health in one place may consume too much water, introduce disease, conflict with local markets, or fall outside expected growing seasons somewhere else.
+### Core Philosophy: Decision-Support, Not Decision-Replacement
+Field Shift operates on a fundamental principle of farmer-centered design:
+> *"The tool identifies patterns, synthesizes satellite data, and reveals possibilities — but it never replaces farmer judgment, generational wisdom, or local agronomic review."*
 
-This challenge is inspired in part by multigenerational farming experience — many families have lived through seasons where better tools for tracking changing conditions could have helped identify healthier, more resilient rotation choices. Today, NASA’s long‑term environmental datasets offer new ways to understand local growing conditions, and SI techniques open opportunities to translate that data into practical, farmer‑friendly insights.
-Objectives
+---
 
-You may consider combining NASA Earth observations with local agricultural information to create an app, model, interactive map, or other decision‑support tool. The goal is to help farmers explore crop‑rotation options that may improve soil health and strengthen resilience to changing weather and water conditions.
+## 2. NASA Earth Observations (EO) Data Stack
 
-You may explore NASA datasets such as SMAP, ECOSTRESS, GPM, Landsat, MODIS, NASA POWER, GRACE and GRACE‑FO, and SRTM or other NASA elevation products. Using these datasets, you may analyze patterns in temperature, heat stress, rainfall, soil moisture, evaporation, frost risk, extreme precipitation, vegetation stress, and long‑term water trends. You may also consider local soil information, crop characteristics, and farmer priorities—such as water use, forage value, nitrogen‑fixing potential, erosion reduction, organic matter improvement, or market suitability.
+Field Shift harmonizes long-term satellite observations across spatial and temporal resolutions to provide actionable field-level intelligence:
 
-Your tool may highlight times when fields are typically bare, seasons when current crops appear more vulnerable, or opportunities for rotations that could interrupt pest cycles, reduce water demand, improve infiltration, or add supplemental income. You may compare at least three rotation strategies, including the existing rotation. For each strategy, you may explain why it was suggested, what evidence supports it, what benefits it may offer, where information gaps exist, and any risks that would need local review by farmers or agricultural experts.
+```
+                      ┌─────────────────────────────────┐
+                      │    NASA EARTH OBSERVATIONS      │
+                      └────────────────┬────────────────┘
+                                       │
+     ┌──────────────────┬──────────────┴─────┬──────────────────┐
+     ▼                  ▼                    ▼                  ▼
+┌──────────────┐ ┌──────────────┐   ┌────────────────┐   ┌──────────────┐
+│  SOIL & HEAT │ │ PRECIPITATION│   │   VEGETATION   │   │ GROUNDWATER  │
+│ SMAP 9km/3km │ │  GPM IMERG   │   │ Landsat 8/9    │   │ GRACE-FO     │
+│ECOSTRESS 70m │ │ NASA POWER   │   │  MODIS / NDVI  │   │ SRTM Topo    │
+└──────┬───────┘ └──────┬───────┘   └────────┬───────┘   └──────┬───────┘
+       │                │                    │                  │
+       └────────────────┼────────────────────┼──────────────────┘
+                        ▼
+       ┌─────────────────────────────────────┐
+       │ SPATIAL INTELLIGENCE & HARMONIZATION│
+       │ Resampled to 30m Field Analysis Grid│
+       └────────────────┬────────────────────┘
+                        ▼
+       ┌─────────────────────────────────────┐
+       │ MULTI-CRITERIA ROTATION EVALUATION  │
+       │ Water, Soil N, Erosion, Market, Risk│
+       └─────────────────────────────────────┘
+```
 
-The intended outcome is a supportive tool — one that helps identify patterns and possibilities, but does not replace farmer judgment or local agricultural expertise.
-Potential Considerations
+### Integrated Datasets & Scientific Relevance:
 
-You may (but are not required to) consider the following:
+1. **SMAP (Soil Moisture Active Passive):**
+   - *Variables:* Top 5 cm surface soil moisture ($m^3/m^3$) and 0–100 cm root-zone soil moisture anomalies.
+   - *Farm Application:* Identifies chronic dry spells, field water holding capacity, and saturation risk before planting.
+2. **ECOSTRESS (onboard the ISS):**
+   - *Variables:* Evapotranspiration (ET), Evaporative Stress Index (ESI), and Land Surface Temperature (LST at 70m).
+   - *Farm Application:* Pinpoints field heat stress hotspots and assesses crop water consumption efficiency.
+3. **GPM (Global Precipitation Measurement) & IMERG:**
+   - *Variables:* Half-hourly to daily precipitation rates, extreme rainfall frequency, dry-spell durations.
+   - *Farm Application:* Tracks seasonal water availability and warns against extreme precipitation runoff.
+4. **Landsat 8/9 & Sentinel-2 / MODIS:**
+   - *Variables:* 30m multispectral surface reflectance, Normalized Difference Vegetation Index (NDVI), and Enhanced Vegetation Index (EVI).
+   - *Farm Application:* Maps historical crop vigor curves, detects bare-soil exposure windows, and quantifies cover-crop biomass.
+5. **NASA POWER (Prediction Of Worldwide Energy Resources):**
+   - *Variables:* Solar irradiance, daily maximum/minimum air temperature, Growing Degree Days (GDD, base 10°C / base 50°F), relative humidity, and frost risk probability.
+   - *Farm Application:* Computes crop maturity timelines and critical late spring / early fall frost windows.
+6. **GRACE & GRACE-FO (Gravity Recovery and Climate Experiment):**
+   - *Variables:* Terrestrial Water Storage Anomaly (TWSA) and regional aquifer depletion trends.
+   - *Farm Application:* Provides macro-level context on long-term groundwater security for irrigated agriculture.
+7. **SRTM (Shuttle Radar Topography Mission):**
+   - *Variables:* 30m digital elevation, slope, aspect, and Topographic Wetness Index (TWI).
+   - *Farm Application:* Predicts runoff velocity, erosion hazard zones, and cold-air drainage frost pockets.
 
-Understanding Conditions & Data
+---
 
-    Explore how changes in temperature, soil moisture, rainfall, evaporation, and vegetation stress relate to crop vulnerability and soil health.
-    Consider explaining scientific terms such as evapotranspiration, soil moisture anomalies, vegetation indices (e.g., NDVI), frost risk, and water‑balance indicators.
-    Clarify how satellite observations differ from ground‑based measurements, and how combining both may improve accuracy.
+## 3. Spatial Intelligence & Multi-Resolution Data Harmonization
 
-SI, Modeling, and Data Fusion
+Because NASA datasets operate across disparate resolutions (SMAP at 9km/36km, Landsat at 30m, ECOSTRESS at 70m, GPM at 10km, and GRACE at ~300km), Field Shift implements a unified harmonization pipeline:
 
-    You may compare different SI or statistical approaches for identifying patterns in historical climate and soil conditions.
-    Consider how SI could highlight seasonal transitions, bare‑field periods, or times when current crops show increased stress.
-    Explain how the model interprets uncertainty and where local expertise would be needed to validate results.
-    You may consider harmonizing datasets with different spatial and temporal resolutions by downsampling, aggregating, or resampling them to a common analysis grid. Harmonizing resolution can help the SI combine SMAP soil moisture, ECOSTRESS land‑surface temperature, GPM precipitation, Landsat/MODIS vegetation indices, GEDI biomass, and soil datasets into coherent features that support clear, explainable rotation‑strategy comparisons.
+- **Spatial Resampling:** Coarse-resolution grids are downscaled using digital elevation models (SRTM) and high-resolution land-surface covariates (Landsat NDVI/albedo) to a common **30m field grid**.
+- **Temporal Alignment:** Aligning multi-temporal feeds into three distinct agronomic horizons:
+  1. *Immediate Operational Horizon (1–30 days):* Soil moisture anomalies and frost risk alerts.
+  2. *Seasonal Horizon (1–12 months):* Crop GDD accumulation and water balance.
+  3. *Decadal Climatological Horizon (10–25 years):* Historical precipitation shifts, heat wave frequency, and aquifer drawdown.
+- **Uncertainty Transparency:** The model displays explicit confidence bands (Low/Medium/High) for every indicator, flagging when ground-truth soil testing is recommended.
 
-Rotation Strategy Exploration
+---
 
-    Compare rotation scenarios by examining nutrient cycling, erosion risk, organic matter contributions, pest‑cycle disruption, water use, forage potential, or market considerations.
-    You may consider mapping which rotation ideas best align with farmer priorities—such as conserving water, generating supplemental income, or improving soil structure.
-    Include brief explanations of how nitrogen‑fixing crops, cover crops, deep‑rooting crops, or drought‑tolerant crops contribute to long‑term soil health.
+## 4. Rotation Strategy Exploration & Multi-Criteria Engine
 
-Geospatial Mapping & Visualization
+Field Shift evaluates and compares at least **three distinct rotation strategies** side-by-side:
 
-    Consider whether interactive maps could help users explore trends over time such as long‑term soil moisture, heat waves, or water‑storage declines.
-    Explore ways to visualize field‑level vulnerabilities (e.g., zones of erosion risk, water stress hotspots, frost‑prone areas).
-    You may include optional add‑ons such as timelines, overlays comparing datasets, or scenario sliders that adjust rainfall or temperature patterns.
+### The 3 Core Rotation Scenarios:
 
-Farmer‑Centered Design
+| Strategy | Rotation Sequence | Primary Goal | NASA Evidence Base | Key Trade-Off |
+|---|---|---|---|---|
+| **1. Baseline (Existing)** | Continuous Monoculture (e.g. Corn-Soybean or Alfalfa-Alfalfa) | Familiar market channels, established equipment | Landsat shows 4.5 months bare soil; SMAP shows root-zone water depletion | High erosion risk during winter; declining soil organic matter; high synthetic N fertilizer cost |
+| **2. Strategy A (Water Conserver)** | Sorghum-Sudangrass $\rightarrow$ Winter Rye Cover $\rightarrow$ Dryland Pulse (Chickpea/Lentil) | Maximize water-use efficiency; reduce irrigation reliance | ECOSTRESS shows 32% lower evaporative loss; NASA POWER verifies GDD fit | Requires marketing unfamiliar pulse crops; lower peak commodity revenue during wet years |
+| **3. Strategy B (Soil Builder & Nitrogen Fixer)** | Small Grain (Winter Wheat) $\rightarrow$ Hairy Vetch / Crimson Clover Relay $\rightarrow$ Sunflower / Canola | Rebuild soil organic matter; fix biological nitrogen; break rootworm cycles | Landsat shows 11-month living canopy cover; GPM verifies rainfall match | Extra seed drilling pass; requires careful cover crop termination timing |
 
-    Consider how to make the tool easily interpretable for farmers who may have limited technical or geospatial experience.
-    Think about ways to allow farmers to input their own priorities or constraints, such as water availability, equipment limitations, or market preferences.
-    Share reminders that the tool is intended to support—not replace—local expertise, and highlight where human judgment is particularly important.
+### 6 Evaluation Pillars for Every Strategy:
+1. **Water Footprint & Consumptive Use:** Modeled mm of water required vs. SMAP/GPM seasonal supply.
+2. **Biological Nitrogen Fixation ($\Delta\text{N kg/ha}$):** Legume contributions reducing synthetic fertilizer expenses.
+3. **Soil Organic Matter (SOM) Trajectory:** Estimated 5-year SOM build-up rate through continuous living roots.
+4. **Erosion & Bare-Field Mitigation:** Reduction in days with exposed topsoil during peak wind/rain events.
+5. **Pest & Disease Cycle Disruption:** Breaks host cycles for corn rootworm, soybean cyst nematode, or alfalfa weevils.
+6. **Economic & Equipment Feasibility:** Projected input savings, harvest complexity, and regional market liquidity.
 
-For data and resources related to this challenge, refer to the Resources tab at the top of the page. More resources may be added before the hackathon begins.
+---
 
-NASA Space Apps is funded by NASA's Science Mission Directorate through a contract with Booz Allen Hamilton
-, Mindgrub
-, and SecondMuse
-.
+## 5. Farmer-Centered Design & Interactive Features
 
-Copyright ©2026 NASA | Privacy Policy | Legal | Contact | Resources
-Connect with #SpaceApps
+To bridge the gap between complex Earth observations and practical farm management, Field Shift features:
 
+1. **Interactive Field Geospatial Map:**
+   - Multi-layer visualizer toggling between:
+     * 🛰️ **Satellite True Color**
+     * 🌿 **Landsat NDVI (Vegetation Vigor & Bare Soil)**
+     * 💧 **SMAP Soil Moisture Anomaly**
+     * ☀️ **ECOSTRESS Evapotranspiration Heat Stress**
+     * ⛰️ **SRTM Slope & Erosion Risk Contours**
+2. **Farmer Priority Weighting Sliders:**
+   - Growers dial their exact operational goals:
+     - 💧 *Water Conservation*
+     - 🧪 *Soil Health & Organic Matter*
+     - 💰 *Supplemental Revenue*
+     - 🚜 *Low Equipment Overhead*
+3. **Climate "What-If" Scenario Stress Tester:**
+   - Sliders to adjust temperature anomalies ($\Delta T = 0^\circ\text{C}$ to $+3.5^\circ\text{C}$) and rainfall shifts ($\pm 35\%$), demonstrating how each rotation survives flash droughts or heatwaves.
+4. **Transparent "Why Was This Suggested?" Evidence Cards:**
+   - Every recommendation lists:
+     - ✅ *Why it was suggested*
+     - 🛰️ *NASA satellite evidence supporting it*
+     - 🔍 *Information gaps & uncertainties*
+     - ⚠️ *Local risks requiring agronomist review*
+5. **Plain-Language Agricultural Glossary:**
+   - Integrated explanations for farmers: *Evapotranspiration (ET)*, *NDVI*, *Growing Degree Days (GDD)*, *Root-Zone Moisture*, *Soil Organic Matter (SOM)*.
+
+---
+
+## 6. Technical Stack & Implementation Architecture
+
+- **Frontend:** React 19 + Vite (lightning-fast, browser-based, mobile/tablet responsive for farm truck cabs).
+- **Styling:** Custom Agricultural Glassmorphism (Earthy Emerald `#10b981`, Harvest Gold `#f59e0b`, Deep Soil `#1c1917`, Sky Cyan `#0284c7`).
+- **Data Engine:**
+  - `src/utils/nasaEarthData.js`: Curated, verified datasets for diverse agricultural zones (Great Basin / Nevada, US Corn Belt, California Central Valley, Mediterranean Drylands).
+  - `src/utils/rotationScoringEngine.js`: Multi-criteria agronomic decision algorithms and climate sensitivity models.
+- **Component Architecture:**
+  - `src/components/Header.jsx`: Farm location selector, NASA Space Apps banner, and glossary toggle.
+  - `src/components/FieldMapVisualizer.jsx`: Interactive GIS field map with NASA satellite layer overlays.
+  - `src/components/FarmerPrioritySliders.jsx`: Weighting controls for farm goals and constraints.
+  - `src/components/ClimateStressTester.jsx`: Scenario simulator ($\Delta T$, $\Delta P$) with vulnerability gauges.
+  - `src/components/RotationComparisonMatrix.jsx`: Side-by-side strategy breakdown with trade-off cards.
+  - `src/components/StrategyEvidenceModal.jsx`: Deep-dive into NASA satellite telemetry and local agronomist checklist.
+  - `src/components/FarmerGlossaryModal.jsx`: Plain-English definitions of satellite remote sensing concepts.

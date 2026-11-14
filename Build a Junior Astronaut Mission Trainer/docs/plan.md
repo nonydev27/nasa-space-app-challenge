@@ -49,7 +49,7 @@ The simulation engine models 5 interconnected survival subsystems:
 │   LIFE SUPPORT   │   │RADIATION SHIELDS │   │   HYDROPONICS    │
 │  (O2 / H2O / CO2)│   │(Regolith / Active│   │(Food / Calories) │
 │   ECLSS Loop     │   │  Magnetic Field) │   │ Water / Light    │
-└────────┬─────────┘   └─────────┬────────┘   └─────────┬────────┘
+└────────┬─────────┘ └─────────┬────────┘   └─────────┬────────┘
          │                       │                      │
          └───────────────────────┼──────────────────────┘
                                  ▼
