@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { soundFx } from '../utils/soundEffects';
 import { music } from '../utils/music';
+import { BrandMark, BrandByline } from '../components/BrandLogo';
 
 interface Props {
   onPlay: () => void;
@@ -100,9 +101,11 @@ export function TitleScreen({ onPlay }: Props) {
       <div className="title-planet" />
       <div className="title-content">
         <span className="eyebrow">NASA SPACE APPS 2026 · JUNIOR ASTRONAUT MISSION TRAINER</span>
+        <BrandMark size={112} className="title-mark" />
         <h1 className="title-logo">
           Astro<span>Lab</span>
         </h1>
+        <BrandByline className="title-byline" />
         <p className="title-tag">Survive the Moon. Outlast Mars. Fly with your crew.</p>
         <button type="button" className="play-button" onClick={play} aria-label="Play">
           <span className="ring r1" />

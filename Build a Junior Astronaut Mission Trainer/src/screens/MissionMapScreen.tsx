@@ -12,6 +12,7 @@ import { CREW_ERRORS, CrewLink } from '../net/crewLink';
 import { DataExplorer, WeatherStatus } from '../components/DataExplorer';
 import { getSpaceWeather } from '../data/liveData';
 import type { SpaceWeather } from '../data/donki';
+import { BrandMark } from '../components/BrandLogo';
 
 // Node centres (% of the track area). The dashed route is drawn through the same points.
 const NODE_POS: Array<[number, number]> = [[9, 52], [24, 30], [38, 62], [53, 38], [68, 66], [86, 40]];
@@ -84,6 +85,10 @@ export function MissionMapScreen({ pilot, onLaunch, onEditAvatar, onSignOut }: P
   return (
     <div className="screen map-screen">
       <header className="map-topbar">
+        <span className="map-brand" title="AstroLab by Nonydev">
+          <BrandMark size={34} />
+          <b>Astro<span>Lab</span></b>
+        </span>
         <button type="button" className="pilot-card" onClick={onEditAvatar} title="Change astronaut">
           <AvatarBadge avatar={avatar} size={46} />
           <span>

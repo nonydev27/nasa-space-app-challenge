@@ -4,6 +4,7 @@ import { soundFx } from '../utils/soundEffects';
 import { callsignTaken, createPilot, deletePilot, loadPilots, setActivePilot } from '../game/profileStore';
 import { findAvatar } from '../game/avatars';
 import { AvatarBadge } from '../components/AvatarBadge';
+import { BrandMark, BrandByline } from '../components/BrandLogo';
 import type { AgeGroup, PilotProfile } from '../game/types';
 
 interface Props {
@@ -46,9 +47,13 @@ export function SignUpScreen({ onSignedIn }: Props) {
         <div className="hero-orbit" />
         <div className="hero-copy">
           <span className="eyebrow">NASA SPACE APPS 2026 · JUNIOR ASTRONAUT MISSION TRAINER</span>
-          <h1>
-            Astro<span className="accent">Lab</span>
+          <h1 className="hero-lockup">
+            <BrandMark size={72} className="hero-mark" />
+            <span>
+              Astro<span className="accent">Lab</span>
+            </span>
           </h1>
+          <BrandByline />
           <p>
             Run a base on the Moon or Mars. Keep the power on, the air clean and the crew safe from solar storms, using real NASA
             space-weather and space-biology data. Every choice costs something.
